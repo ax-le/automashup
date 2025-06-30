@@ -9,4 +9,4 @@ This repository contains two sub-repositories:
 This repository is a regrouping of two other repositories:
 - https://github.com/MichaelMikkles/AutoMashup/
 - https://github.com/LeaMyl/Automashup_Mashup_Eval/
-which were the practical repositories used for development. The current repository also contains additional commits compared with the original AutoMashup repo (MichaelMikkles/AutoMashup/).
+which were the practical repositories used for development.
