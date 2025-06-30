@@ -1,43 +1,12 @@
-# Automashup
+# Automashup: Automatic Music Mashups Creation
 
-Automashup is a Python application that allows you to generate a mashup from several songs :
-![](https://github.com/huyhoangpjn/AutoMashup/blob/main/app.gif)
+Hi, and welcome to this GitHub repository, which is the companion repository for the article "Automashup: Automatic Music Mashups Creation," published at the GRETSI 2025 conference.
 
-## Installation
+This repository contains two sub-repositories:
+- "app - backend and frontend," that contains the AutoMashup core functions, including the Mashup creation process and the GUI webpage,
+- "automatic song selection experiments" that contain the experiments related to the central part of the article, _i.e.,_ how to select pairs of songs that will be blended automatically. 
 
-We strongly recommand the use of a Python 3.10 environment with a Conda environment.
-
-> pip3 install -r requirements.txt
-
-NATTEN version 0.15.1
-
-> pip install natten==0.15.1+torch200cu117 -f https://shi-labs.com/natten/wheels
-
-Pyrubberband-cli
-
-> sudo apt install rubberband-cli
-
-To install All-In-One Music Structure Analyzer: https://github.com/mir-aidj/all-in-one/tree/main (LINUX, MACOS RECOMMANDED!)
-
-### Launch the app
-
-> cd ./automashup-app
-
-> streamlit run app.py
-
-## Other
-
-To install and test DMC on your own: https://github.com/csteinmetz1/automix-toolkit (clone + set up (modify sklearn --> scikit-learn in the setup.py) and test directly on your machine, dont forget to modify the paths)
-
-## Docker Image
-
-We have a docker image of the automashup app, it's only been tested on Linux :
-https://hub.docker.com/r/gaubiche/automashup/
-
-## Adding Mashup Methods
-
-The aim of this interface is to present multiple mashup technics.
-
-You can add some to the application by creating a mashup function in the file /automashup-app/mashup.py and then modifying a little bit the file automashup-app/app.py
-
-If you want to experiment around new mashup methods, you can use the /automashup-notebook/notebook.ipynb file. It shows an example of a working mashup method
+This repository is a regrouping of two other repositories:
+- https://github.com/MichaelMikkles/AutoMashup/
+- https://github.com/LeaMyl/Automashup_Mashup_Eval/
+which were the practical repositories used for development. The current repository also contains additional commits compared with the original AutoMashup repo (MichaelMikkles/AutoMashup/).
