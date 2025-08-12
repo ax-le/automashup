@@ -10,3 +10,7 @@ This repository is a regrouping of two other repositories:
 - https://github.com/MichaelMikkles/AutoMashup/
 - https://github.com/LeaMyl/Automashup_Mashup_Eval/
 which were the practical repositories used for development.
+
+
+https://github.com/user-attachments/assets/6c248242-a85b-4546-b142-1678b718c923
+
