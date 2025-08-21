@@ -11,8 +11,22 @@ This repository is a regrouping of two other repositories:
 - https://github.com/LeaMyl/Automashup_Mashup_Eval/
 which were the practical repositories used for development.
 
+## Examples
 
-https://github.com/user-attachments/assets/6c248242-a85b-4546-b142-1678b718c923
+### Original song A
+
+
+
+### Original song B
+
+
+
+### Mashup: Vocal A + Instr B
+
+
+
+### Mashup: Vocal B + Instr A
+
 
 
 ## Installation
@@ -75,7 +89,7 @@ Automashup comes with a GUI, that you may launch using the following steps:
 > streamlit run app.py
 
 ## Sandbox
-Some tests were made using DMC for mixing, and should be pursued in near future. To install and test DMC on your own: https://github.com/csteinmetz1/automix-toolkit (clone + set up (modify sklearn --> scikit-learn in the setup.py) and test directly on your machine, dont forget to modify the paths)
+Some tests were made using DMC for mixing, and should be pursued in the near future. To install and test DMC on your own: https://github.com/csteinmetz1/automix-toolkit (clone + set up (modify sklearn --> scikit-learn in the setup.py) and test directly on your machine, dont forget to modify the paths)
 
 ## Docker Image
 
@@ -84,8 +98,8 @@ https://hub.docker.com/r/gaubiche/automashup/
 
 ## Adding Mashup Methods
 
-The aim of this interface is to present multiple mashup technics.
+This interface aims to present multiple mashup techniques.
 
-You can add some to the application by creating a mashup function in the file /src/mashup.py and then modifying a little bit the file src/app.py
+You can add some to the application by creating a mashup function in the file /src/mashup.py and then modifying the file src/app.py
 
-If you want to experiment around new mashup methods, you can use the /automashup-notebook/notebook.ipynb file. It shows an example of a working mashup method
+If you want to experiment with new mashup methods, you can use the /automashup-notebook/notebook.ipynb file. It shows an example of a working mashup method.
