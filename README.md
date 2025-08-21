@@ -1,6 +1,6 @@
 # Automashup: Automatic Music Mashups Creation
 
-Hi, and welcome to this GitHub repository, which is the companion repository for the article "Automashup: Automatic Music Mashups Creation," published at the GRETSI 2025 conference.
+Hi, and welcome to this GitHub repository, which is the companion repository for the article "Automashup: Automatic Music Mashups Creation," published at the GRETSI 2025 conference. The paper is accessible here: https://hal.science/hal-05191030/document.
 
 This repository contains two sub-repositories:
 - "app - backend and frontend," that contains the AutoMashup core functions, including the Mashup creation process and the GUI webpage,
