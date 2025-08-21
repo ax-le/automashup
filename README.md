@@ -14,7 +14,7 @@ which were the practical repositories used for development.
 
 ## Examples
 
-Below are two examples of Mashups obtained from the FMA music archive. As you will see, the mashups are still far from being of professional audio quality. Future work will be dedicated to enhancing the audio quality, and notably using automatic mixing tools like [DMC](https://csteinmetz1.github.io/dmc-icassp2021/).
+Below are two examples of Mashups obtained from the FMA music archive. As you will see, the mashups are still far from being of professional audio quality. Future work will be dedicated to enhancing the audio quality, and notably using automatic mixing tools like [automix-toolkit](https://github.com/csteinmetz1/automix-toolkit).
 
 ### Original song A
 
