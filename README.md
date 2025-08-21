@@ -30,9 +30,9 @@ which were the practical repositories used for development.
 
 
 ## Installation
-So, basically, a lot of external packages essential for this project do not follow the recent releases. Hence, installation is getting more and more difficult.
+So, many external packages essential for this project do not follow the recent releases. Hence, installation is becoming increasingly complex.
 
-To ensure that there will not be problem, you should defintely fix python to 3.10, and follow these steps (sorry for the inconvenience).
+To ensure that there won't be a problem, you should definitely fix Python to 3.10, and follow these steps (I'm sorry for the inconvenience).
 
 ### Set up a virtualenv
 First, set up the virtual environment. You may use the tool that you prefer, but we used conda on our side, hence we recommend it.
@@ -51,7 +51,7 @@ pip install -r requirements.txt
 
 ### Installing natten (for allin1)
 
-This is actually one of the main problem. You should install natten so that it works with allin1. But allin1 was developed using old versions of natten, hence it is suited to work with precise versions.
+This is one of the main problems. You should install natten so that it works with allin1. But allin1 was developed using old versions of natten, hence it is suited to work with precise versions.
 
 So, you should use one precise version of natten, the following:
 
@@ -82,18 +82,18 @@ sudo apt install ffmpeg
 
 
 ## GUI: Launch the barfi application
-Automashup comes with a GUI, that you may launch using the following steps:
+Automashup comes with a GUI that you may launch using the following steps:
 
 > cd ./automashup/app
 
 > streamlit run app.py
 
 ## Sandbox
-Some tests were made using DMC for mixing, and should be pursued in the near future. To install and test DMC on your own: https://github.com/csteinmetz1/automix-toolkit (clone + set up (modify sklearn --> scikit-learn in the setup.py) and test directly on your machine, dont forget to modify the paths)
+Some tests were made using DMC for mixing, and should be pursued shortly. To install and test DMC on your own: https://github.com/csteinmetz1/automix-toolkit (clone + set up (modify sklearn --> scikit-learn in the setup.py) and test directly on your machine, don't forget to change the paths)
 
 ## Docker Image
 
-We have a docker image of the automashup app, it's only been tested on Linux :
+We have a Docker image of the automashup app; it's only been tested on Linux :
 https://hub.docker.com/r/gaubiche/automashup/
 
 ## Adding Mashup Methods
