@@ -25,15 +25,15 @@ https://github.com/user-attachments/assets/12994748-8c7e-48be-9450-7e86a9f23dec
 
 ### Original song B
 
-https://github.com/user-attachments/assets/b050b29c-5a3d-4256-aa47-b8eba0612e1c
+https://github.com/user-attachments/assets/9fcdd5c9-c95b-4dea-948c-83d2ea17644c
 
 ### Mashup: Vocal A + Instr B
 
-https://github.com/user-attachments/assets/b3574d31-0a44-4c0a-bbdf-9b6fb796892a
+https://github.com/user-attachments/assets/334f85b9-8ab6-4e59-a8de-31d71b8be587
 
 ### Mashup: Vocal B + Instr A
 
-https://github.com/user-attachments/assets/0120a2b1-13a0-4517-a89e-8bd7325ea3a8
+https://github.com/user-attachments/assets/3e3b466d-9ba2-4355-b04c-82012a144b17
 
 ## Installation
 So, many external packages essential for this project do not follow the recent releases. Hence, installation is becoming increasingly complex.
