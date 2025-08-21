@@ -87,7 +87,7 @@ sudo apt install ffmpeg
 ## GUI: Launch the barfi application
 Automashup comes with a GUI that you may launch using the following steps:
 
-> cd ./automashup/app
+> cd ./automashup/src
 
 > streamlit run app.py
 
