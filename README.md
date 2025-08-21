@@ -12,6 +12,9 @@ This repository is a regrouping of two other repositories:
 
 which were the practical repositories used for development.
 
+## Files
+Files containing the subselection of FMA used in the paper, along with all the mashups created for the purpose, and metadata from FMA can be found here: https://zenodo.org/records/16921593
+
 ## Examples
 
 Below are two examples of Mashups obtained from the FMA music archive. As you will see, the mashups are still far from being of professional audio quality. Future work will be dedicated to enhancing the audio quality, and notably using automatic mixing tools like [automix-toolkit](https://github.com/csteinmetz1/automix-toolkit).
