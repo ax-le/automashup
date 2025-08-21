@@ -1,0 +1,7 @@
+README.md
+setup.py
+automashup.egg-info/PKG-INFO
+automashup.egg-info/SOURCES.txt
+automashup.egg-info/dependency_links.txt
+automashup.egg-info/requires.txt
+automashup.egg-info/top_level.txt
