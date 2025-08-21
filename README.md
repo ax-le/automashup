@@ -9,25 +9,28 @@ This repository contains two sub-repositories:
 This repository is a regrouping of two other repositories:
 - https://github.com/MichaelMikkles/AutoMashup/
 - https://github.com/LeaMyl/Automashup_Mashup_Eval/
+
 which were the practical repositories used for development.
 
 ## Examples
 
+Below are two examples of Mashups obtained from the FMA music archive. As you will see, the mashups are still far from being of professional audio quality. Future work will be dedicated to enhancing the audio quality, and notably using automatic mixing tools like [DMC](https://csteinmetz1.github.io/dmc-icassp2021/).
+
 ### Original song A
 
-https://github.com/ax-le/automashup/blob/main/Audio%20Examples/Bam%20Bam%20-%20Hi-Q.mp4
+https://github.com/user-attachments/assets/12994748-8c7e-48be-9450-7e86a9f23dec
 
 ### Original song B
 
-
+https://github.com/user-attachments/assets/b050b29c-5a3d-4256-aa47-b8eba0612e1c
 
 ### Mashup: Vocal A + Instr B
 
-
+https://github.com/user-attachments/assets/b3574d31-0a44-4c0a-bbdf-9b6fb796892a
 
 ### Mashup: Vocal B + Instr A
 
-
+https://github.com/user-attachments/assets/0120a2b1-13a0-4517-a89e-8bd7325ea3a8
 
 ## Installation
 So, many external packages essential for this project do not follow the recent releases. Hence, installation is becoming increasingly complex.
