@@ -37,16 +37,21 @@ def mashup_technic(vocal_track, instrumental_tracks, target_loudness=-14.0, save
     mashup_bpm = vocal_track.bpm # The vocal track is used to determine the target bpm
     mashup_beats = vocal_track.beats # The vocal track is used to determine the target beats
     mashup_downbeats = vocal_track.downbeats # The vocal track is used to determine the target downbeats
+
+    mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}_standard"
+
+    add_to_save_name = ""
+
     match repitch:
         case None:
             mashup_key = None
-            add_to_save_name = "no_repitch"
+            add_to_save_name += "_no_repitch"
         case 'vocals_to_instrumental':
             mashup_key = instrumental_tracks[0].key
             if mashup_key != vocal_track.key: # We save computation time if the key is already the same.
                 vocal_track.audio = pitch_utils.repitch_audio_to_target(vocal_track.audio, vocal_track.sr, vocal_track.key, mashup_key)
                 vocal_track.key = mashup_key
-            add_to_save_name = "repitch_vocals_to_instrumental"
+            add_to_save_name += "_repitch_vocals_to_instrumental"
         case 'instrumental_to_vocals':
             mashup_key = vocal_track.key
             for track in instrumental_tracks:
@@ -54,11 +59,9 @@ def mashup_technic(vocal_track, instrumental_tracks, target_loudness=-14.0, save
                     if track.key != mashup_key: # We save computation time if the key is already the same.
                         track.audio = pitch_utils.repitch_audio_to_target(track.audio, track.sr, track.key, mashup_key)
                         track.key = mashup_key
-            add_to_save_name = "repitch_instrumental_to_vocals"
+            add_to_save_name += "_repitch_instrumental_to_vocals"
         case _:
             raise ValueError(f"Invalid repitch value: {repitch}")
-
-    mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}"
 
     # Create a dummy track to store the mashup
     mashup = Track(mashup_name, 'mashup', np.zeros(1), mashup_sr, mashup_bpm, mashup_beats, mashup_downbeats, mashup_key, vocal_track.get_segments_as_dict(), path=None, beat_positions=vocal_track.beat_positions)
@@ -111,17 +114,18 @@ def mashup_by_section(vocal_track, instrumental_tracks, target_loudness=-14.0, t
     mashup_beats = vocal_track.beats # The vocal track is used to determine the target beats
     mashup_downbeats = vocal_track.downbeats # The vocal track is used to determine the target downbeats
 
-    mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}"
+    mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}_section_alignment"
+    add_to_save_name = ""
 
     match repitch:
         case None:
             mashup_key = None
-            add_to_save_name = "no_repitch"
+            add_to_save_name += "_no_repitch"
         case 'vocals_to_instrumental':
             raise NotImplementedError("Only instrumental to vocals repitching is implemented yet, because the section adaptation is only implemented for instrumental tracks.")
         case 'instrumental_to_vocals':
             mashup_key = vocal_track.key # Actually, does not matter since we repitch to the section key. Maybe the key attribute should be set section-wise?
-            add_to_save_name = "repitch_instrumental_to_vocals"
+            add_to_save_name += "_repitch_instrumental_to_vocals"
         case _:
             raise ValueError(f"Invalid repitch value: {repitch}")
 
@@ -140,8 +144,10 @@ def mashup_by_section(vocal_track, instrumental_tracks, target_loudness=-14.0, t
     ]
 
     if time_adapt_method == 'bpm':
+        add_to_save_name += "_bpm"
         start_song = vocal_segments_after_downbeat[0].start_samples # Should it be on the first downbeat?
     elif time_adapt_method == 'downbeats':
+        add_to_save_name += "_downbeats"
         start_song = vocal_segments_after_downbeat[0].downbeats_samples[0]
     # Crop vocal to the start of the song
     crop_vocal = vocal_track.audio[int(start_song):]
