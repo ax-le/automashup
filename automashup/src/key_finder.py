@@ -53,24 +53,22 @@ class KeyFinder(object):
     minor_profile_ks: list = None
 
     def __init__(self,
-                 file: str,  # path to mp3 file
-                 title: str = None,  # title of song, if None, defaults to filename from path
-                 t_start: int = None,  # time in seconds, if None, defaults to beginning of file
-                 t_end: int = None  # time in seconds, if None, defaults to end of file
+                waveform: np.ndarray = None,
+                sr: int = None,
+                filepath: str = None,  # path to mp3 file
+                t_start: int = None,  # time in seconds, if None, defaults to beginning of file
+                t_end: int = None  # time in seconds, if None, defaults to end of file
                  ) -> None:
 
-        self.filename = file
-
-        if title is None:
-            self.title = file
+        if waveform is not None:
+            self.waveform = waveform
+            assert sr is not None, "sr must be provided when waveform is provided"
+            self.sr = sr
         else:
-            self.title = title
+            assert filepath is not None, "filepath must be provided when waveform is not provided"
+            self.waveform, self.sr = librosa.load(path=filepath, sr=None)
 
-        self.waveform, self.sr = librosa.load(path=file, sr=None)
         self.duration = librosa.get_duration(y=self.waveform, sr=self.sr)
-
-        self.waveform
-        self.sr = self.sr
 
         self.t_start = t_start
         self.t_end = t_end

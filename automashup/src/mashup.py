@@ -1,8 +1,14 @@
-from automashup.src.utils import increase_array_size
+from automashup.src.track import Track
+import automashup.src.tempo_utils as tempo_utils
+import automashup.src.duration_utils as duration_utils
+import automashup.src.pitch_utils as pitch_utils
+import automashup.src.structure_utils as structure_utils
+import automashup.src.mixing as mixing
+import automashup.src.postprocessing as postprocessing
+import automashup.src.concatenate as concatenate
 import librosa
 import numpy as np
-import pyrubberband as pyrb
-import pyloudnorm as pyln
+import warnings
 
 # Mashup Technics
 # In this file, you may add mashup technics
@@ -11,91 +17,181 @@ import pyloudnorm as pyln
 # You may find useful methods in the track.py file
 # Be sure to return a Track object
 
-def mashup_technic(tracks, phase_fit=False, target_loudness=-14.0):
-    # Mashup technic with first beat alignment and bpm sync
-    sr = tracks[0].sr # The first track is used to determine the target bpm
-    tempo = tracks[0].bpm
-    main_track_length = len(tracks[0].audio)
-    beginning_instant = tracks[0].beats[0] # beats metadata
-    beginning = beginning_instant * sr
-    mashup = np.zeros(0)
-    mashup_name = ""
+# %% Vanilla mashup (just bpm adjustment)
+def mashup_technic(vocal_track, instrumental_tracks, target_loudness=-14.0, save_folder_path=None, repitch = None):
+    """
+    Vanilla mashup technic with first downbeat alignment and bpm sync
+    
+    Args:
+        vocal_track: Vocal track object
+        instrumental_tracks: List of instrumental track objects
+        target_loudness: Target loudness in LUFS
+        save_folder_path: Path to save the mashup
+        repitch: track on which to repitch the instrumental tracks
+    
+    Returns:
+        Track object
+    """
+    # Mashup technic with first downbeat alignment and bpm sync
+    mashup_sr = vocal_track.sr
+    mashup_bpm = vocal_track.bpm # The vocal track is used to determine the target bpm
+    mashup_beats = vocal_track.beats # The vocal track is used to determine the target beats
+    mashup_downbeats = vocal_track.downbeats # The vocal track is used to determine the target downbeats
+    match repitch:
+        case None:
+            mashup_key = None
+            add_to_save_name = "no_repitch"
+        case 'vocals_to_instrumental':
+            mashup_key = instrumental_tracks[0].key
+            if mashup_key != vocal_track.key: # We save computation time if the key is already the same.
+                vocal_track.audio = pitch_utils.repitch_audio_to_target(vocal_track.audio, vocal_track.sr, vocal_track.key, mashup_key)
+                vocal_track.key = mashup_key
+            add_to_save_name = "repitch_vocals_to_instrumental"
+        case 'instrumental_to_vocals':
+            mashup_key = vocal_track.key
+            for track in instrumental_tracks:
+                if track.instrument != 'drums': # Don't repitch drums
+                    if track.key != mashup_key: # We save computation time if the key is already the same.
+                        track.audio = pitch_utils.repitch_audio_to_target(track.audio, track.sr, track.key, mashup_key)
+                        track.key = mashup_key
+            add_to_save_name = "repitch_instrumental_to_vocals"
+        case _:
+            raise ValueError(f"Invalid repitch value: {repitch}")
 
-    # we add each track to the mashup
-    for track in tracks:
-        mashup_name += track.name + " " # name
+    mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}"
+
+    # Create a dummy track to store the mashup
+    mashup = Track(mashup_name, 'mashup', np.zeros(1), mashup_sr, mashup_bpm, mashup_beats, mashup_downbeats, mashup_key, vocal_track.get_segments_as_dict(), path=None, beat_positions=vocal_track.beat_positions)
+
+    # Starting the song on the first downbeat
+    beginning_instant = vocal_track.downbeats[0]
+    beginning_frame = beginning_instant * mashup_sr
+    crop_vocal = vocal_track.audio[int(beginning_frame):]
+
+    # Adding each track to the mashup
+    inst_tracks_audio = []
+    for track in instrumental_tracks:
         track_tempo = track.bpm
-        if track == tracks[0]:
-            track_beginning_temporal = track.beats[0]
-        else:
-            track_beginning_temporal = track.downbeats[0]
         track_sr = track.sr
-        track_beginning = track_beginning_temporal * track_sr
-        track_audio = track.audio
+        track_beginning = track.downbeats[0] * track_sr
+        track_audio = track.audio[int(track_beginning):]
+        if track_sr != mashup_sr:
+            track_audio = librosa.resample(track_audio, orig_sr=track_sr, target_sr=mashup_sr)
+            track_sr = mashup_sr
 
-        # reset first beat position
-        track_audio_no_offset = np.array(track_audio)[round(track_beginning):] 
+        # Change the bpm
+        track_audio_accelerated =  tempo_utils.accelerate_audio(track_audio, track_sr, track_tempo, mashup_bpm)
+        inst_tracks_audio.append(track_audio_accelerated)
 
-        # Change the bpm if there is no phase fit
-        if not phase_fit:
-            track_audio_accelerated = pyrb.time_stretch(track_audio_no_offset, track_sr, rate = tempo / track_tempo)
-        else:
-            #bpm is handled in segment.py
-            track_audio_accelerated = track_audio_no_offset
-
-        # add the right number of zeros to align with the main track
-        final_track_audio = np.concatenate((np.zeros(round(beginning)), track_audio_accelerated)) 
-
-        size = max(len(mashup), len(final_track_audio))
-        mashup = np.array(mashup)
-        mashup = (increase_array_size(final_track_audio, size) + increase_array_size(mashup, size))
-
-    # Adjust mashup length to be the same as the main track's audio length
-    if len(mashup) > main_track_length:
-        mashup = mashup[:main_track_length]
-    else:
-        mashup = increase_array_size(mashup, main_track_length)
-
-    # Apply LUFS normalization to the mashup
-    meter = pyln.Meter(sr)  # Create a BS.1770 loudness meter
-    mashup_loudness = meter.integrated_loudness(mashup)  # Measure the loudness
-    print(f"Mashup loudness (before normalization): {mashup_loudness} LUFS")
+    mashup.audio = mixing.additive_mix(crop_vocal, inst_tracks_audio)
 
     # Normalize the mashup to the target loudness (-14 LUFS by deafult)
-    mashup_normalized = pyln.normalize.loudness(mashup, mashup_loudness, target_loudness)
-    print(f"Mashup normalized to {target_loudness} LUFS")
+    mashup.audio = postprocessing.normalize_lufs(mashup.audio, mashup_sr, target_lufs=target_loudness)
 
-    # we return a modified version of the first track
-    # doing so, we keep its metadata
-    tracks[0].audio = mashup
+    if save_folder_path:
+        # Save audio
+        mashup.path = postprocessing.save_song(mashup.audio, mashup.sr, save_folder_path, mashup.name, add_name=add_to_save_name)
 
-    return tracks[0]
+    return mashup
 
+# ============================================================================
+# Section-Based Mashup Functions
+# ============================================================================
 
-def mashup_technic_repitch(tracks):
-    # Mashup technique to change the key by repitch
-    key = tracks[0].get_key() # target key
-    for i in range(len(tracks)-1):
-        tracks[i+1].pitch_track(key) # repitch
+def mashup_by_section(vocal_track, instrumental_tracks, target_loudness=-14.0, time_adapt_method='bpm', adding_intros=True, save_folder_path=None, repitch = None):
+    """
+    Create a mashup by aligning sections of instrumental tracks to the vocal structure.
+    
+    Aligns vocal and instrumental tracks on their respective first downbeats.
+    Extracts instrumental intros (before first downbeat) and prepends them to the mix.
+    """
+    # Mashup technic with first downbeat alignment and bpm sync
+    mashup_sr = vocal_track.sr
+    mashup_bpm = vocal_track.bpm # The vocal track is used to determine the target bpm
+    mashup_beats = vocal_track.beats # The vocal track is used to determine the target beats
+    mashup_downbeats = vocal_track.downbeats # The vocal track is used to determine the target downbeats
 
-    return mashup_technic(tracks)
+    mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}"
 
+    match repitch:
+        case None:
+            mashup_key = None
+            add_to_save_name = "no_repitch"
+        case 'vocals_to_instrumental':
+            raise NotImplementedError("Only instrumental to vocals repitching is implemented yet, because the section adaptation is only implemented for instrumental tracks.")
+        case 'instrumental_to_vocals':
+            mashup_key = vocal_track.key # Actually, does not matter since we repitch to the section key. Maybe the key attribute should be set section-wise?
+            add_to_save_name = "repitch_instrumental_to_vocals"
+        case _:
+            raise ValueError(f"Invalid repitch value: {repitch}")
 
-def mashup_technic_fit_phase(tracks):
-    # Mashup technique with phase alignment (i.e., chorus with chorus, verse with verse...)
-    # Each track's structure is aligned with the first one
-    for i in range(len(tracks) - 1):
-        tracks[i + 1].fit_phase(tracks[0])
+    # Create a dummy track to store the mashup
+    mashup = Track(mashup_name, 'mashup_by_section', np.zeros(1), mashup_sr, mashup_bpm, mashup_beats, mashup_downbeats, mashup_key, vocal_track.get_segments_as_dict(), path=None, beat_positions=vocal_track.beat_positions)
 
-    # Standard mashup method
-    return mashup_technic(tracks, phase_fit=True)
+    # Collect adapted instrumental sections for each vocal segment
+    instrumental_audio_sections = [[] for _ in instrumental_tracks]
+    label_counts = [{} for _ in instrumental_tracks]
 
-def mashup_technic_fit_phase_repitch(tracks):
-    # Mashup technique with phase alignment and repitch
-    # Repitch has to be the last method for it to be effective
-    key = tracks[0].get_key() # target key
-    for i in range(len(tracks)-1):
-        tracks[i + 1].fit_phase(tracks[0]) # phase fit
-        tracks[i+1].pitch_track(key) # repitch
-    # Phase fit mashup
-    return mashup_technic(tracks, phase_fit=True)
+    vocal_first_downbeat = vocal_track.downbeats[0]
+    
+    # Filter vocal segments to only those starting at or after the first downbeat
+    vocal_segments_after_downbeat = [
+        seg for seg in vocal_track.segments if seg.end >= vocal_first_downbeat
+    ]
+
+    if time_adapt_method == 'bpm':
+        start_song = vocal_segments_after_downbeat[0].start_samples # Should it be on the first downbeat?
+    elif time_adapt_method == 'downbeats':
+        start_song = vocal_segments_after_downbeat[0].downbeats_samples[0]
+    # Crop vocal to the start of the song
+    crop_vocal = vocal_track.audio[int(start_song):]
+
+    for section in vocal_segments_after_downbeat:
+        for i, inst_track in enumerate(instrumental_tracks):
+            # Get the number of times this label has appeared in the instrumental track so far
+            current_index_before_increment = label_counts[i].get(section.label, 0)
+            # Adapt the instrumental section to the vocal section
+            inst_audio_aligned, current_index_after_increment = structure_utils.adapt_this_instrumental_section(
+                section, inst_track, current_index_before_increment, time_adapt_method=time_adapt_method
+            )
+            if inst_audio_aligned is None:
+                warnings.warn(f"Skipping an entire empty section: {section.label} for instrumental track {inst_track.name}")
+                continue
+            # Repitch the instrumental section to the vocal section
+            if repitch == 'instrumental_to_vocals' and inst_track.key != section.key and inst_track.instrument != 'drums':
+                inst_audio_aligned = pitch_utils.repitch_audio_to_target(inst_audio_aligned, inst_track.sr, inst_track.key, section.key) # Repitching to the section. As of now, it is only the same as the vocal track key, but could be adapted in the future.
+            # Append the adapted instrumental section to the list of instrumental sections
+            instrumental_audio_sections[i].append(inst_audio_aligned)
+            # Update the number of times this label has appeared in the instrumental track. May have not changed if the label was not found
+            label_counts[i][section.label] = current_index_after_increment
+
+    # Concatenate main sections
+    main_sections_instrumental = [concatenate.concatenate_sections(s) for s in instrumental_audio_sections]
+
+    # Mix main sections
+    if len(crop_vocal) != len(main_sections_instrumental[0]):
+        warnings.warn(f"Length mismatch between vocal final main section ({len(crop_vocal)}) and instrumental final main sections ({len(main_sections_instrumental[0])}). Not a problem if both lengths are close, may be if they are too different (gap: {abs(len(crop_vocal) - len(main_sections_instrumental[0]))} samples, i.e. {abs(len(crop_vocal) - len(main_sections_instrumental[0])) / mashup_sr} seconds).")
+    mixed_main_sections = mixing.additive_mix(crop_vocal, main_sections_instrumental)
+    
+    if adding_intros: # We want to add the instrumental intro of the song
+        # Extract intros and concatenate main sections
+        intro_audios = [structure_utils.extract_intro_audio(t, mashup_bpm) for t in instrumental_tracks]
+        padded_intro_audios = structure_utils.pad_and_align_intro_audios(intro_audios)
+        mixed_intros = mixing.additive_mix_instrumentals(padded_intro_audios)
+    
+        # Concatenate intros and main sections
+        final_song = np.concatenate([mixed_intros, mixed_main_sections])
+
+    else: # We start on the first downbeat of the song, and disregard potential intro
+        final_song = mixed_main_sections
+
+    # Normalize the mashup to the target loudness
+    final_song = postprocessing.normalize_lufs(final_song, mashup_sr, target_loudness)
+
+    mashup.audio = final_song
+
+    if save_folder_path:
+        # Save audio
+        mashup.path = postprocessing.save_song(mashup.audio, mashup.sr, save_folder_path, mashup.name, add_name=add_to_save_name)
+
+    return mashup

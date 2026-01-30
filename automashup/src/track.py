@@ -1,206 +1,172 @@
+"""
+Track module for representing musical tracks.
+
+This module provides the Track class for handling audio data with metadata,
+delegating specific functionality to utility modules.
+"""
+
 import json
 import librosa
-import numpy as np
-import pyrubberband as pyrb
 
-from automashup.src.utils import note_to_frequency, calculate_pitch_shift, get_path,\
-      increase_array_size
-from automashup.src.segment import *
-
-
-# Define a Track class to represent a musical track
-# This class uses objects of type Segment
-# The aim of this kind of object is to keep together the audio itself,
-# the sampling frequency and the metadata coming from allin1 analysis
+from automashup.src.segment import Segment
+from automashup.src.pitch_utils import repitch_audio_to_target
+from automashup.src.metronome_utils import add_metronome
+import automashup.src.utils as utils
 
 class Track:
-    transition_time = 1 # transition time in seconds
+    """
+    Represents a musical track with audio data, metadata, and segments.
+    
+    The Track class keeps together the audio itself, the sampling frequency,
+    and the metadata coming from allin1 analysis.
+    """
+    
+    transition_time = 1  # transition time in seconds
 
-    # Standard constructor
-    def __init__(self, track_name, audio, metadata, sr):
-
-        # Initialize track properties
+    def __init__(self, track_name, instrument, audio, sr, bpm, beats, downbeats, key, segments, path, beat_positions):
+        """
+        Initialize a Track instance.
+        
+        Args:
+            track_name: Name of the track.
+            audio: Audio data as numpy array.
+            metadata: Dictionary containing track metadata.
+            sr: Sample rate of the audio.
+        """
         self.name = track_name
+        self.instrument = instrument
         self.audio = audio
         self.sr = sr
         self.segments = []
-
-        # Load track metadatas
-        for key in metadata.keys():
-            if key!="segments":
-                setattr(self, key, metadata[key])
-            else:
-                for segment in metadata["segments"]:
-                    # Create segment objects
-                    if isinstance(segment, Segment):
-                        segment_ = segment
-                    else:
-                        # we handle the segments as stored in the struct files
-                        segment_ = Segment(segment)
-                    segment_.link_track(self)
-                    self.segments.append(segment_)
-
-
-    def track_from_song(track_name, type, stored_data_path="."):
-        # Function to create a track from a preprocessed song
-        # type should be one of the following :
-        # 'entire', 'bass', 'drums', 'vocals', 'other'
-        name = track_name + ' - ' + type
-        audio, sr = librosa.load(get_path(track_name, type, stored_data_path=stored_data_path), sr=None)
-        struct_path = f"{stored_data_path}/struct/{track_name}.json"
-        with open(struct_path, 'r') as file:
-            metadata = json.load(file)
-        return Track(name, audio, metadata, sr)
-
-    # Must use the key from the voice
-    def get_key(self):
-        # Function to retrieve the key of a track
-        # we use the "key" metadata which is a list of correlation
-        # with each key. We look for the max correlation to get the
-        # right key
-        best_key, best_score = "", ""
-        for key, score in self.key.items():
-            if best_score=="" or best_score<score:
-                best_key, best_score = key, score
-        return best_key
-
-
-    def __repitch(self, semitone_shift):
-        # Function to repitch a track using a semitone shift
-        # https://www.youtube.com/watch?v=Y2lUmwB7lzI
-        shifted_audio = pyrb.pitch_shift(y=self.audio, sr=self.sr, n_steps=semitone_shift)
-        self.audio = shifted_audio
-
-
-    def pitch_track(self, target_key):
-        # Function to repitch a track to a target key
-        target_frequency = note_to_frequency(target_key)
-        track_frequency = note_to_frequency(self.get_key())
-        self.__repitch(calculate_pitch_shift(track_frequency, target_frequency))
-
-
-    def add_metronome(self, stored_data_path="."):
-        # Function to add metronome sounds on the beats according
-        # to the metadata of the track sounds
-        downbeat_sound_audio, _ = librosa.load(f"{stored_data_path}/metronome-sounds/block.mp3")
-        otherbeat_sound_audio, _ = librosa.load(f"{stored_data_path}/metronome-sounds/drumstick.mp3")
-
-        # add sound for each beat
-        for i, beat_frame in enumerate(self.beats):
-            # if it's a downbeat, use the according sound
-            clic_sound = downbeat_sound_audio if i % 4 == 0 else otherbeat_sound_audio
-            clic = increase_array_size(clic_sound, len(self.audio[round(self.sr*beat_frame):]))
-            # check that we do not get out of the track's bounds
-            if len(self.audio[round(self.sr*beat_frame):])>=len(clic):
-                self.audio[round(self.sr*beat_frame):] += clic
-
-
-    def fit_phase(self, target_track):
-        # Function to align track phases (verse, chorus, bridge, ...)
-        # to a target track.
-        # we'll do loops on the track to reach the number of beats targetted
-        # for each phase
-        # The challenge for this function is to keep the beats metadata
-        # updated
-        audio = np.array([])
-
-        # lists of the return track beats and downbeats
-        # we put 0 for convenience (see beats[-1] after)
-        beats = [0]
-        downbeats = [0]
-
-
-        print(f" ********************** Adjusting the song {self.name}  **********************")
-
-        # List of already found segments
-        found_segments = {}
-
-        # loop over each phase to reproduce
-        for target_segment in target_track.segments:
-            i = 0
-            found_segment = False
-            current_label = target_segment.label
-
-            # Check if we have already found this label before
-            if current_label in found_segments:
-                start_index = found_segments[current_label] + 1
-            else:
-                start_index = 0
-
-            i = start_index
-
-            # loop over each segment to find occurrences
-            while i < len(self.segments):
-                segment = self.segments[i]
-                if segment.label == current_label:
-                    # If this is the first time we find the label or we have moved past the previous index
-                    if not found_segment or i > found_segments[current_label]:
-                        found_segment = True
-                        tempo = round(len(segment.beats) / segment.duration)
-                        found_segments[current_label] = i
-                        break
-                i += 1
-
-            # If no segment was found, reuse the last found segment
-            if not found_segment and current_label in found_segments:
-                last_found_index = found_segments[current_label]
-                segment = self.segments[last_found_index]
-                tempo = round(len(segment.beats) / segment.duration)
-                found_segment = True
-
-            # if we do not find it, we add zeros with the right length
-            if (not found_segment):
-                tempo = round(len(target_segment.beats)/target_segment.duration)
-                try:
-                    if tempo == 0:
-                        segment_length = 0
-                    else:
-                        segment_length = int((len(target_segment.beats) / (tempo / 60) * self.sr))
-                    audio = np.concatenate([audio, np.zeros(segment_length)])
-                    beats += [beats[-1] + (i + 1) / (tempo / 60) for i in range(len(target_segment.beats))]
-                    downbeats += [downbeats[-1] + (4 * i + 1) / (tempo / 60) for i in range(len(target_segment.beats) // 4)]
-                except Exception as e:
-                    print(f"Error fitting silence. Error: {e}")
-            else:
-                try:
-                    # if we find it, we make it fit to the desired beat number
-                    if len(target_segment.beats) > 0:
-                        target_bpm = len(target_segment.beats)/target_segment.duration
-
-                        segment_fitted = segment.get_audio_beat_fitted(len(target_segment.beats), target_bpm, len(target_segment.audio), self.sr)
-                        audio = np.concatenate([audio, segment_fitted.audio])
-
-                        # reset first beat position per segment
-                        track_sr = target_track.sr
-                        track_beginning_temporal = target_segment.beats[0]
-                        track_beginning = track_beginning_temporal * track_sr
-                        # reset first beat position
-                        audio = np.array(audio)[round(track_beginning):]
-
-                        # we add the new beats to be able to sync after
-                        beats += [beats[-1] + phase_beat for phase_beat in segment_fitted.beats]
-                        downbeats += [downbeats[-1] + phase_downbeat for phase_downbeat in segment_fitted.downbeats]
-                    # If its empty we ignore it
-                    else: pass
-
-                except Exception as e:
-                    print(f"Error fitting segment: {segment.label} at {segment.start}, Error: {e}")
-                    continue
-
-        # we get rid of the first beats added for convenience
-        beats = beats[1:]
-        downbeats = downbeats[1:]
-
-        self.audio = audio
+        self.bpm = bpm
         self.beats = beats
         self.downbeats = downbeats
+        self.path = path
+        self.beat_positions = beat_positions # Probably useless, but hey
+        self.key = key
 
-    def get_segments(track_name, stored_data_path="."):
-        # This method should return a list of segments for the given song
-        track = Track.track_from_song(track_name, 'entire', stored_data_path=stored_data_path)
-        return [segment.label for segment in track.segments]
+        if isinstance(segments[0], Segment): # To avoid an error in fuse_consecutive_sections, we convert the segments to dicts
+            segments = utils.segments_as_dict(segments)
 
-    def get_segments_full(track_name, stored_data_path="."):
-        # This method should return a list of the structure of segments for the given song
-        track = Track.track_from_song(track_name, 'entire', stored_data_path=stored_data_path)
-        return [{'start': segment.start, 'end': segment.end, 'label': segment.label} for segment in track.segments]
+        segments = self.fuse_consecutive_sections(segments)
+
+        # Load segments
+        for seg_data in segments:
+            segment = seg_data if isinstance(seg_data, Segment) else Segment(seg_data)
+            segment.associate_track_info(self)
+            self.segments.append(segment)
+
+    # def repitch_track(self, target_key): # Should not be in the object I think
+    #     """
+    #     Repitch the track to a target key.
+        
+    #     Args:
+    #         target_key: The desired key for the track.
+    #     """
+    #     self.audio = pitch_audio_to_target(
+    #         self.audio, 
+    #         self.sr, 
+    #         self.key, 
+    #         target_key
+    #     )
+    #     self.key = target_key
+
+    def add_metronome(self, stored_data_path="."):
+        """
+        Add metronome sounds on the beats.
+        
+        Args:
+            stored_data_path: Path to the directory containing metronome sounds.
+        """
+        self.audio = add_metronome(
+            self.audio, 
+            self.sr, 
+            self.beats, 
+            stored_data_path
+        )
+
+    def fuse_consecutive_sections(self, segments, start_after_first_downbeat=True):
+        """
+        Fuse consecutive segments that have the same label.
+        
+        Args:
+            segments: List of segment objects with start, end, label attributes
+        
+        Returns:
+            List of fused segment dicts with start, end, label
+        """
+        if not segments:
+            raise ValueError("Empty list of segments provided")
+        
+        fused = []
+        idx_first_seg_to_fuse = 0
+        if start_after_first_downbeat:
+            # Sometimes, some intro happens and is not fixed to the bar grid (ex: Never Gonna Give You Up, or My Own Summer - both start with a drum break).
+            # We skip all segments that end before the first downbeat (generally one, but easy to extend to multiple if ever needed), and add them to the fused list.
+            # If not handled, the first segment could consist of a fusing between an intro of less than a bar, and the first bar of the first section,
+            # hence leading to a weird not bar-aligned first segment.
+            while idx_first_seg_to_fuse < len(segments) and segments[idx_first_seg_to_fuse]['end'] <= self.downbeats[0]:
+                fused.append(segments[idx_first_seg_to_fuse]) # We add the intro to the fused list, and continue with the next segment
+                idx_first_seg_to_fuse += 1
+        current = {'start': segments[idx_first_seg_to_fuse]['start'], 'end': segments[idx_first_seg_to_fuse]['end'], 'label': segments[idx_first_seg_to_fuse]['label']}
+        
+        for i in range(idx_first_seg_to_fuse + 1, len(segments)):
+            seg = segments[i]
+            if seg['label'] == current['label']:
+                # Extend current segment
+                current['end'] = seg['end']
+            else:
+                fused.append(current)
+                current = {'start': seg['start'], 'end': seg['end'], 'label': seg['label']}
+        
+        # Append the last segment
+        fused.append(current)
+        return fused
+
+    def get_segments_as_dict(self):
+        return utils.segments_as_dict(self.segments)
+
+    # def fit_phase(self, target_track):
+    #     """
+    #     Align track phases to a target track's structure.
+        
+    #     Args:
+    #         target_track: Target Track object to align phases to.
+    #     """
+    #     print(f" ********************** Adjusting the song {self.name}  **********************")
+    #     self.audio, self.beats, self.downbeats = fit_phase(
+    #         self.segments, 
+    #         self.sr, 
+    #         target_track
+    #     )
+
+    # @staticmethod
+    # def get_segments(track_name, stored_data_path="."):
+    #     """
+    #     Get a list of segment labels for a given song.
+        
+    #     Args:
+    #         track_name: Name of the track.
+    #         stored_data_path: Path to stored data directory.
+            
+    #     Returns:
+    #         List of segment labels.
+    #     """
+    #     track = Track.track_from_song(track_name, 'entire', stored_data_path=stored_data_path)
+    #     return [segment.label for segment in track.segments]
+
+    # @staticmethod
+    # def get_segments_full(track_name, stored_data_path="."):
+    #     """
+    #     Get full segment information for a given song.
+        
+    #     Args:
+    #         track_name: Name of the track.
+    #         stored_data_path: Path to stored data directory.
+            
+    #     Returns:
+    #         List of dicts with start, end, and label for each segment.
+    #     """
+    #     track = Track.track_from_song(track_name, 'entire', stored_data_path=stored_data_path)
+    #     return [{'start': segment.start, 'end': segment.end, 'label': segment.label} 
+    #             for segment in track.segments]
