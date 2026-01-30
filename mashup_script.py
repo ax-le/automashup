@@ -1,12 +1,15 @@
 import os
-import warnings
-from IPython.display import Audio # For Notebooks
+from IPython.display import Audio, display
 
 import automashup.src.preprocessing as preprocessing
 import automashup.src.postprocessing as postprocessing
+import automashup.src.mixing as mixing
 import automashup.src.utils as utils
 from automashup.src.track import Track
 import automashup.src.mashup as mashupper
+from automashup.src import tempo_utils
+
+from copy import deepcopy
 
 default_data_path = "/Brain/private/a23marmo/projects/automashup/git_folder/automashup/data"
 default_music_path = f"{default_data_path}/audio"
@@ -19,32 +22,58 @@ def mashup_script(song_path_1, song_path_2, stored_data_folder = default_stored_
     os.makedirs(stored_data_folder, exist_ok=True)
 
     if verbose:
-        print("Starting the mashup script.")
+        print("Processing the first song...")
+        print("Estimating key, structure, and everything else.")
+    # Estimate key, structure, and everything else
+    metadata_1 = preprocessing.song_info_estimation(song_path_1, default_stored_data_path)
 
-        print("Processing the first song.")
-        print("Separating vocals from the instrumental.")
-    
-    # Do music source separation - vocals/instrumental
-    vocals, instru = preprocessing.load_or_compute_source_separated_paths(song_path_1, stored_data_folder, two_stems = True)
+    if verbose:
+        print("Source separation.")
+    # Do 2 stems music source separation - vocals/instrumental
+    # vocals_1, instru_1 = preprocessing.load_or_compute_source_separated_songs(song_path_1, default_stored_data_path, two_stems=True)
+    # Do 4 stems music source separation - vocals/bass/drums/other. I would prefer 2 stems, but 4 stems is already done by Allin1
+    vocals_4stems_1, bass_4stems_1, drums_4stems_1, other_4stems_1 = preprocessing.load_or_compute_source_separated_songs(song_path_1, default_stored_data_path, two_stems = False, model = 'htdemucs', verbose = True)
+
+    if verbose:
+        print("Initializing the Track object.")
+    song_name_1_without_extension = utils.get_song_name_without_extension(song_name_1)
+    mashup_vocals = Track(song_name_1_without_extension, 'vocals', vocals_4stems_1[0], vocals_4stems_1[1], metadata_1['bpm'], metadata_1['beats'], metadata_1['downbeats'], metadata_1['key'], metadata_1['segments'], metadata_1['path'], metadata_1['beat_positions'])
 
     if verbose:
         print("Estimating key, structure, and everything else.")
     # Estimate key, structure, and everything else
-    metadata_1 = preprocessing.song_info_estimation(song_path_1, stored_data_folder)
+    metadata_2 = preprocessing.song_info_estimation(song_path_2, default_stored_data_path)
 
     if verbose:
-        print("Processing the second song.")
-        print("Separating vocals from the instrumental.")
-    # Do music source separation - vocals/instrumental
-    vocals, instru = preprocessing.load_or_compute_source_separated_paths(song_path_2, stored_data_folder, two_stems = True)
+        print("Source separation.")
+    # Do 2 stems music source separation - vocals/instrumental
+    # vocals_2, instru_2 = preprocessing.load_or_compute_source_separated_songs(song_path_2, default_stored_data_path, two_stems=True)
+    # Do 4 stems music source separation - vocals/bass/drums/other. I would prefer 2 stems, but 4 stems is already done by Allin1
+    vocals_4stems_2, bass_4stems_2, drums_4stems_2, other_4stems_2 = preprocessing.load_or_compute_source_separated_songs(song_path_2, default_stored_data_path, two_stems = False, model = 'htdemucs', verbose = True)
 
     if verbose:
-        print("Estimating key, structure, and everything else.")
-    # Estimate key, structure, and everything else
-    metadata_2 = preprocessing.song_info_estimation(song_path_2, stored_data_folder)
+        print("Vocals attributes:")
+        print(f"  BPM: {mashup_vocals.bpm}")
+        print(f"  Key: {mashup_vocals.key}")
+        print(f"  Beat frames: {mashup_vocals.beats}")
+        print(f"  Audio shape: {mashup_vocals.audio.shape}")
+        print(f"  Sampling Frequency: {mashup_vocals.sr}")
+        print()
+        print("Bass attributes:")
+        print(f"  BPM: {mashup_bass.bpm}")
+        print(f"  Key: {mashup_bass.key}")
+        print(f"  Beat frames: {mashup_bass.beats}")
+        print(f"  Audio shape: {mashup_bass.audio.shape}")
+        print(f"  Sampling Frequency: {mashup_bass.sr}")
+
+
 
     if verbose:
-        print("Let's create some Track objects with our preprocessed songs")
+        print("Initializing the Track object.")
+    song_name_2_without_extension = utils.get_song_name_without_extension(song_name_2)
+    mashup_bass = Track(song_name_2_without_extension, 'bass', bass_4stems_2[0], bass_4stems_2[1], metadata_2['bpm'], metadata_2['beats'], metadata_2['downbeats'], metadata_2['key'], metadata_2['segments'], metadata_2['path'], metadata_2['beat_positions'])
+    mashup_drums = Track(song_name_2_without_extension, 'drums', drums_4stems_2[0], drums_4stems_2[1], metadata_2['bpm'], metadata_2['beats'], metadata_2['downbeats'], metadata_2['key'], metadata_2['segments'], metadata_2['path'], metadata_2['beat_positions'])
+    mashup_other = Track(song_name_2_without_extension, 'other', other_4stems_2[0], other_4stems_2[1], metadata_2['bpm'], metadata_2['beats'], metadata_2['downbeats'], metadata_2['key'], metadata_2['segments'], metadata_2['path'], metadata_2['beat_positions'])
 
     tracks =  [] # input of the mashup methods
 
@@ -75,25 +104,66 @@ def mashup_script(song_path_1, song_path_2, stored_data_folder = default_stored_
         print(f"Track audio 2 : {track_2.audio}")
         print(f"Track Sampling Frequency 2 {track_2.sr}")
 
-    if verbose:
-        print("Standard method, nothing done")
-    ## Standard method, nothing done
-    mashup_result_vanilla = mashupper.mashup_technic(tracks) # Apply the mashup_technic function to the 'tracks' list.
+        if verbose:
+            print("Creating mashups with different techniques...")
+            print("Starting with mashup without pitch shifting nor structure alignment.")
+        mashup_result_vanilla = mashupper.mashup_technic(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path)
 
-    if verbose:
-        print("Save the file")
-    # Save the file :
-    postprocessing.save_song(mashup_result_vanilla, mashup_save_folder, song_name_1, song_name_2, "vanilla")
+        # if verbose:
+        #     print("Playing the mashup.")
+        # display(Audio(mashup_result_vanilla.audio, rate=mashup_result_vanilla.sr))
 
-    if verbose:
-        print("Apply the method here")
-    ### Apply the method here
-    mashup_result = mashupper.mashup_technic_fit_phase_repitch(tracks, save_path=default_stored_data_path) # Apply the mashup_technic function to the 'tracks' list.
+        if verbose:
+            print("Mashup with repitching the vocal to the instrumental key, but no structure alignment.")
+        mashup_result_repitch_vocals_to_instrumental = mashupper.mashup_technic(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path, repitch='vocals_to_instrumental')
 
-    if verbose:
-        print("Save the file")
-    # Save the file :
-    postprocessing.save_song(mashup_result, mashup_save_folder, song_name_1, song_name_2, "fit_phase_repitch")
+        # if verbose:
+        #     print("Playing the mashup.")
+        # display(Audio(mashup_result_repitch_vocals_to_instrumental.audio, rate=mashup_result_repitch_vocals_to_instrumental.sr))
+        
+        if verbose:
+            print("Mashup with repitching the instrumental to the vocal key, but no structure alignment.")
+        mashup_result_repitch_instrumental_to_vocals = mashupper.mashup_technic(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path, repitch='instrumental_to_vocals')
+        
+        # if verbose:
+        #     print("Playing the mashup.")
+        # display(Audio(mashup_result_repitch_instrumental_to_vocals.audio, rate=mashup_result_repitch_instrumental_to_vocals.sr))
+
+        if verbose:
+            print("Mashup with structure alignment.")
+            print("First, aligning the instrumental to the vocal structure, each section being set to the bpm of the vocal song.")
+            print("Mashup without repitching.")
+        mashup_result_structure_bpm = mashupper.mashup_by_section(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], time_adapt_method='bpm', save_folder_path = default_save_mashup_path)
+    
+        # if verbose:
+        #     print("Playing the mashup.")
+        # display(Audio(mashup_result_structure_bpm.audio, rate=mashup_result_structure_bpm.sr))
+
+        if verbose:
+            print("Mashup with repitching the instrumental to the vocal key.")            
+        mashup_result_structure_bpm_repitch = mashupper.mashup_by_section(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], time_adapt_method='bpm', repitch = "instrumental_to_vocals", save_folder_path = default_save_mashup_path)
+
+        # if verbose:
+        #     print("Playing the mashup.")
+        # display(Audio(mashup_result_structure_bpm_repitch.audio, rate=mashup_result_structure_bpm_repitch.sr))
+
+        if verbose:
+            print("Secondly, aligning the instrumental to the vocal structure, each bar of the instrumental being adapted to the size of each bar in the vocal part.")
+            print("Mashup without repitching.")
+        mashup_result_structure_db = mashupper.mashup_by_section(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], time_adapt_method='downbeats', save_folder_path = default_save_mashup_path)
+
+        # if verbose:
+        #     print("Playing the mashup.")
+        # display(Audio(mashup_result_structure_db.audio, rate=mashup_result_structure_db.sr))
+
+        if verbose:
+            print("Mashup with repitching the instrumental to the vocal key.")
+        mashup_result_structure_db_repitch = mashupper.mashup_by_section(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], time_adapt_method='downbeats', repitch = "instrumental_to_vocals", save_folder_path = default_save_mashup_path)
+
+        # if verbose:
+        #     print("Playing the mashup.")
+        # display(Audio(mashup_result_structure_db_repitch.audio, rate=mashup_result_structure_db_repitch.sr))
+
 
 if __name__ == "__main__":
 
