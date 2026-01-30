@@ -1,7 +1,7 @@
 import numpy as np
 import copy
 import pyrubberband as pyrb
-from automashup.src.utils import closest_index
+import warnings
 
 class Segment:
 
@@ -215,14 +215,16 @@ class Segment:
                 raise ValueError(f"DEBUG: Last index {last_i+1} out of bounds for track {track.name} in downbeats {track.downbeats} of size {len(track.downbeats)}")
             if track.downbeats[-1] not in db_to_add:
                 db_to_add.append(track.downbeats[-1])
-                
-        self._downbeats = np.array(db_to_add)
-        # self._downbeats = np.array([
-        #     db[i] for db in track.downbeats if self._start <= db < self._end
-        # ])
-        self._downbeats_samples = np.array([
-            int(db * self.sr) for db in self._downbeats
-        ])
+        
+        if db_to_add == [] or len(db_to_add) == 1:
+            warnings.warn(f"Less than 2 downbeats found in segment {self} for track {track.name}, cannot make a bar.")
+            self._downbeats = None
+            self._downbeats_samples = None
+        else:
+            self._downbeats = np.array(db_to_add)
+            self._downbeats_samples = np.array([
+                int(db * self.sr) for db in self._downbeats
+            ])
 
     def get_audio_segment(self, track=None):
         """

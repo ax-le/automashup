@@ -39,6 +39,8 @@ def adapt_this_instrumental_section(vocal_segment_of_interest, instrumental_trac
             
         case 'downbeats': # May sometimes be a problem if the downbeats that needs to be added slow or accelerate too much, but it's better than nothing
             audio_barwise = instrumental_matching_section.get_audio_barwise(track=instrumental_track)
+            if len(audio_barwise) == 0:
+                raise ValueError("Empty barwise audio. Should be catched earlier.")
             accelerated_instrumental_matching_section_audio = tempo_utils.accelerate_to_match_downbeats(
                 audio_barwise, instrumental_matching_section.sr, vocal_segment_of_interest.downbeats_samples  # Property, not method - no ()
             )
@@ -78,12 +80,16 @@ def find_matching_section(target_label, segments, current_index=0):
     if not segments:
         raise ValueError("Empty list of segments provided")
     
+    def _is_section_empty(section):
+        return section.downbeats_samples is None  
+
     # Count segments with matching labels to handle multiple same-label sections
     exact_matches = [seg for seg in segments if seg.label == target_label]
     if exact_matches: # We found sections with the same label. Yay!
         # Use current_index to pick corresponding section when multiple exist
         idx = min(current_index, len(exact_matches) - 1)
-        return exact_matches[idx], current_index + 1
+        if not _is_section_empty(exact_matches[idx]):
+            return exact_matches[idx], current_index + 1
     
     # Else, try closest label match (e.g., 'chorus' matches 'chorus A', 'chorus 1', etc.)
     target_base = target_label.split()[0].lower() if target_label else ''
@@ -91,15 +97,22 @@ def find_matching_section(target_label, segments, current_index=0):
     if close_matches: # Ok, we found sections with the same label base. Yay!
         # Use current_index to pick corresponding section when multiple exist
         idx = min(current_index, len(close_matches) - 1)
-        return close_matches[idx], current_index + 1
+        if not _is_section_empty(close_matches[idx]):
+            return close_matches[idx], current_index + 1
     
     # Fallback to first verse, by default. We don't increment current_index because we haven't found a match.
     verse_matches = [seg for seg in segments if 'verse' in seg.label.lower()]
     if verse_matches:
-        return verse_matches[0], current_index
+        if not _is_section_empty(verse_matches[0]):
+            return verse_matches[0], current_index
     
-    # Ultimate fallback: first segment, by default. We don't increment current_index because we haven't found a match.
-    return segments[0], current_index
+    # Ultimate fallback: first non-empty segment, by default. We don't increment current_index because we haven't found a match.
+    i = 0
+    while _is_section_empty(segments[i]):
+        i += 1
+        if i >= len(segments):
+            raise ValueError("No non-empty segment found in list of segments")
+    return segments[i], current_index
     # return None # Could also be None, notably to know where to inpaint. Can be handled from here actually.
 
 def extract_intro_audio(track, target_bpm):

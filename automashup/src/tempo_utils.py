@@ -48,6 +48,9 @@ def accelerate_to_match_downbeats(barwise_audio, sr, ref_downbeats_in_samples):
     adapted_bars = []
 
     nb_bars = len(barwise_audio) # To check
+    if nb_bars == 0:
+        raise ValueError("Empty barwise audio. Should be catched earlier.")
+        
     nb_bars_ref = len(ref_downbeats_in_samples) - 1
 
     for i in range(nb_bars_ref):
