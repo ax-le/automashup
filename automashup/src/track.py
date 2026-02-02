@@ -146,7 +146,7 @@ class Track:
 
     def fuse_consecutive_sections(self, segments, start_after_first_downbeat=True):
         """
-        Fuse consecutive segments that have the same label.
+        Fuse consecutive segments that have the same label. Also remove segments shorter than 1 second.
         
         Args:
             segments: List of segment objects with start, end, label attributes
@@ -154,6 +154,9 @@ class Track:
         Returns:
             List of fused segment dicts with start, end, label
         """
+        def _is_long_enough(segment): # Remove segments shorter than 1 second, as they may induce errors later
+            return segment['end'] - segment['start'] > 1
+
         if not segments:
             raise ValueError("Empty list of segments provided")
         
@@ -165,7 +168,8 @@ class Track:
             # If not handled, the first segment could consist of a fusing between an intro of less than a bar, and the first bar of the first section,
             # hence leading to a weird not bar-aligned first segment.
             while idx_first_seg_to_fuse < len(segments) and segments[idx_first_seg_to_fuse]['end'] <= self.downbeats[0]:
-                fused.append(segments[idx_first_seg_to_fuse]) # We add the intro to the fused list, and continue with the next segment
+                if _is_long_enough(segments[idx_first_seg_to_fuse]):
+                    fused.append(segments[idx_first_seg_to_fuse]) # We add the intro to the fused list, and continue with the next segment
                 idx_first_seg_to_fuse += 1
         current = {'start': segments[idx_first_seg_to_fuse]['start'], 'end': segments[idx_first_seg_to_fuse]['end'], 'label': segments[idx_first_seg_to_fuse]['label']}
         
@@ -175,11 +179,13 @@ class Track:
                 # Extend current segment
                 current['end'] = seg['end']
             else:
-                fused.append(current)
+                if _is_long_enough(current):
+                    fused.append(current)
                 current = {'start': seg['start'], 'end': seg['end'], 'label': seg['label']}
         
         # Append the last segment
-        fused.append(current)
+        if _is_long_enough(current):
+            fused.append(current)
         return fused
 
     def add_metronome(self, metronome_sound_path="/data/audio/metronome-sounds"):
