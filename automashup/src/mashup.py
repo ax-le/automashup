@@ -13,7 +13,7 @@ import automashup.src.postprocessing as postprocessing
 import automashup.src.concatenate as concatenate
 
 # %% Vanilla mashup (just bpm adjustment)
-def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudness=-14.0, save_folder_path=None, repitch = None):
+def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudness=-14.0, save_folder_path=None, repitch = None, add_to_save_name = ""):
     """
     Vanilla mashup with first downbeat alignment and bpm sync.
 
@@ -37,8 +37,6 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
 
     mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}_adjust_songscale"
     
-    add_to_save_name = ""
-
     # Repitching
     match repitch:
         case None: # No repitching
@@ -105,7 +103,7 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
 # Section-Based Mashup Functions
 # ============================================================================
 
-def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-14.0, time_adapt_method='bpm', adding_intros=True, save_folder_path=None, repitch = None):
+def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-14.0, time_adapt_method='bpm', adding_intros=True, save_folder_path=None, repitch = None, add_to_save_name = ""):
     """
     Create a mashup by aligning sections of instrumental tracks to the vocal structure.
     
@@ -118,7 +116,6 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
     instrumental_tracks = [copy.deepcopy(track) for track in instrumental_tracks_in]
 
     mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}_section_alignment"
-    add_to_save_name = ""
 
     # Create a dummy track to store the mashup
     mashup = Track(

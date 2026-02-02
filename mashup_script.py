@@ -133,6 +133,28 @@ def mashup_script(song_path_1, song_path_2, stored_data_folder = default_stored_
     #     print("Playing the mashup.")
     # display(Audio(mashup_result_structure_db_repitch.audio, rate=mashup_result_structure_db_repitch.sr))
 
+    if verbose:
+        print("Thirdly, aligning the instrumental to the vocal structure, but the instrumental is now 2 stems separated instead of 4.")
+        print("Mashup without repitching.")
+
+    vocals_2, instru_2 = preprocessing.load_or_compute_source_separated_songs(song_path_2, default_stored_data_path, two_stems=True)
+    mashup_no_vocals = Track(song_name_2, 'no_vocals', instru_2[0], instru_2[1], metadata_2['bpm'], metadata_2['beats'], metadata_2['downbeats'], metadata_2['key'], metadata_2['segments'], metadata_2['path'])
+
+    mashup_result_structure_db = mashupper.mashup_by_section(vocal_track_in=mashup_vocals, instrumental_tracks_in=[mashup_no_vocals], time_adapt_method='downbeats', save_folder_path = default_save_mashup_path, add_to_save_name = "2_stems")
+
+    # if verbose:
+    #     print("Playing the mashup.")
+    # display(Audio(mashup_result_structure_db.audio, rate=mashup_result_structure_db.sr))
+
+    if verbose:
+        print("Mashup with repitching the instrumental to the vocal key.")
+    mashup_result_structure_db_repitch = mashupper.mashup_by_section(vocal_track_in=mashup_vocals, instrumental_tracks_in=[mashup_no_vocals], time_adapt_method='downbeats', repitch = "instrumental_to_vocals", save_folder_path = default_save_mashup_path, add_to_save_name = "2_stems")
+
+    # if verbose:
+    #     print("Playing the mashup.")
+    # display(Audio(mashup_result_structure_db_repitch.audio, rate=mashup_result_structure_db_repitch.sr))
+
+
 
 if __name__ == "__main__":
     
