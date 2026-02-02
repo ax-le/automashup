@@ -57,11 +57,11 @@ def time_stretch_to_match_downbeats(barwise_audio, sr, ref_downbeats_in_samples)
     nb_bars = len(barwise_audio) # To check
     if nb_bars == 0:
         raise ValueError("Empty barwise audio. Should be catched earlier.")
+
+    if ref_downbeats_in_samples is None or len(ref_downbeats_in_samples) < 2:
+        raise ValueError("No reference downbeats found, or less than 2. Should be catched earlier.")
         
     nb_bars_ref = len(ref_downbeats_in_samples) - 1
-
-    if nb_bars_ref == 0:
-        raise ValueError("Empty or length < 2 reference downbeats. Should be catched earlier.")
 
     for i in range(nb_bars_ref):
         # So, according to the length differences, we need to handle 3 cases:

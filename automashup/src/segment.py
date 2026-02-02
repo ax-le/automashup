@@ -9,6 +9,9 @@ import automashup.src.pitch_utils as pitch_utils
 
 class Segment:
 
+    def __repr__(self):
+        return f"Segment(start={self._start}, end={self._end}, label={self.label})"
+
     def __init__(self, segment_dict):
         # We create a segment from a dict coming from metadata.
         # They look like this :
@@ -159,11 +162,15 @@ class Segment:
         self._key = track.key  # Can be modified later via set_key()
         self._bpm = track.bpm  # Can be modified later via set_bpm()
 
-        self._start_samples = int(self._start * self.sr)
-        self._end_samples = int(self._end * self.sr)
-        self._duration_samples = int(self._duration * self.sr)
+        self._original_start_samples = int(self._start * self.sr)
+        self._original_end_samples = int(self._end * self.sr)
+        self._original_duration_samples = int(self._duration * self.sr)
 
-        self.original_audio = track.audio[self._start_samples:self._end_samples]
+        self.original_audio = track.audio[self._original_start_samples:self._original_end_samples]
+
+        self._start_samples = copy.deepcopy(self._original_start_samples)
+        self._end_samples = copy.deepcopy(self._original_end_samples)
+        self._duration_samples = copy.deepcopy(self._original_duration_samples)
         self.audio = self.original_audio.copy()
 
         # Store downbeats that fall within this segment (absolute times)
@@ -189,6 +196,8 @@ class Segment:
             self._downbeats_samples = None
         else: # If there are at least 2 downbeats, we can make a bar. Then, it's ok.
             self.set_downbeats(db_to_add)
+            self._original_downbeats = copy.deepcopy(self._downbeats)
+            self._original_downbeats_samples = copy.deepcopy(self._downbeats_samples)
 
     def time_stretch_this_section(self, ref_section, time_adapt_method='bpm'):
         # Time stretch to match tempo
@@ -213,6 +222,9 @@ class Segment:
                 audio_barwise = self.get_audio_barwise()
                 if len(audio_barwise) == 0:
                     raise ValueError("Empty barwise audio. Should be catched earlier.")
+                for a_bar in audio_barwise:
+                    if len(a_bar) == 0:
+                        raise ValueError("Empty barwise audio. Should be catched earlier.")
                 stretched_original_section_audio = tempo_utils.time_stretch_to_match_downbeats(
                     audio_barwise, self.sr, ref_section.downbeats_samples  # Property, not method - no ()
                 )
@@ -256,18 +268,15 @@ class Segment:
             track: The track to get the audio segment from.
         """
         audio_segments = []
-        offset_samples = self._start_samples
-        for i in range(len(self._downbeats_samples)-1):
-            db_start_samples = self._downbeats_samples[i] # Starting the bar on a downbeat
-            db_end_samples = self._downbeats_samples[i+1] # Ending the bar on the next downbeat
-            audio_segments.append(self.audio[db_start_samples-offset_samples:db_end_samples-offset_samples]) # This is because the downbeats are absolute times, but the original audio is a slice of the track.
-            # if self.audio_was_modified:
-            #     if track is None:
-            #         raise ValueError("The audio was modified (bpm or key change), so you must provide the newly modified track.")
-            #     audio_segments.append(track.audio[db_start_samples:db_end_samples])
-            # else:
-            #     assert self.audio is not None, "Audio not found in segment object.."
-            #     audio_segments.append(self.audio[db_start_samples-offset_samples:db_end_samples-offset_samples]) # This is because the downbeats are absolute times, but the original audio is a slice of the track.
+        offset_samples = self._original_start_samples
+        for i in range(len(self._original_downbeats_samples)-1):
+            db_start_samples = self._original_downbeats_samples[i] # Starting the bar on a downbeat
+            db_end_samples = self._original_downbeats_samples[i+1] # Ending the bar on the next downbeat
+
+            # add the original audio, instead of the audio, because inplace modification can cause issues 
+            audio_to_add = self.original_audio[db_start_samples-offset_samples:db_end_samples-offset_samples]
+            if audio_to_add.shape[0] != 0: # Do not add empty bars, if any
+                audio_segments.append(audio_to_add)
         return audio_segments
 
     def get_audio_segment(self, track=None):
