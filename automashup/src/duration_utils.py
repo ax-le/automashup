@@ -1,6 +1,5 @@
 import numpy as np
 
-
 # %% Signal manipulation stuff
 def adapt_all_stems_durations(vocal_track, instrumental_tracks, padding_type='constant', target_length=None):
     if target_length is None:

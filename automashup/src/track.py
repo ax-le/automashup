@@ -9,21 +9,24 @@ import json
 import librosa
 
 from automashup.src.segment import Segment
-from automashup.src.pitch_utils import repitch_audio_to_target
-from automashup.src.metronome_utils import add_metronome
 import automashup.src.utils as utils
+import automashup.src.pitch_utils as pitch_utils
+import automashup.src.tempo_utils as tempo_utils
+import automashup.src.metronome_utils as metronome_utils
 
 class Track:
     """
-    Represents a musical track with audio data, metadata, and segments.
+    Represents a musical track with audio data and metadata.
     
-    The Track class keeps together the audio itself, the sampling frequency,
-    and the metadata coming from allin1 analysis.
+    The Track class keeps together the audio itself, the sampling rate,
+    and metadata about the track (bpm, key, segments, etc.).
     """
     
-    transition_time = 1  # transition time in seconds
+    # Song contructor and info
+    def __repr__(self):
+        return f"Track(name={self.name}, instrument={self.instrument}, sr={self.sr}, bpm={self.bpm}, key={self.key})"
 
-    def __init__(self, track_name, instrument, audio, sr, bpm, beats, downbeats, key, segments, path, beat_positions):
+    def __init__(self, track_name, instrument, audio, sr, bpm, beats, downbeats, key, segments, path):
         """
         Initialize a Track instance.
         
@@ -35,15 +38,14 @@ class Track:
         """
         self.name = track_name
         self.instrument = instrument
-        self.audio = audio
-        self.sr = sr
-        self.segments = []
-        self.bpm = bpm
-        self.beats = beats
-        self.downbeats = downbeats
+        self._audio = audio
+        self._sr = sr
+        self._segments = []
+        self._bpm = bpm
+        self._beats = beats
+        self._downbeats = downbeats
         self.path = path
-        self.beat_positions = beat_positions # Probably useless, but hey
-        self.key = key
+        self._key = key
 
         if isinstance(segments[0], Segment): # To avoid an error in fuse_consecutive_sections, we convert the segments to dicts
             segments = utils.segments_as_dict(segments)
@@ -54,36 +56,93 @@ class Track:
         for seg_data in segments:
             segment = seg_data if isinstance(seg_data, Segment) else Segment(seg_data)
             segment.associate_track_info(self)
-            self.segments.append(segment)
+            self._segments.append(segment)
 
-    # def repitch_track(self, target_key): # Should not be in the object I think
-    #     """
-    #     Repitch the track to a target key.
-        
-    #     Args:
-    #         target_key: The desired key for the track.
-    #     """
-    #     self.audio = pitch_audio_to_target(
-    #         self.audio, 
-    #         self.sr, 
-    #         self.key, 
-    #         target_key
-    #     )
-    #     self.key = target_key
+    # Getters and setters
+    @property
+    def audio(self):
+        """Get the audio data."""
+        return self._audio
+    
+    @audio.setter
+    def audio(self, value):
+        """Set the audio data."""
+        self._audio = value
 
-    def add_metronome(self, stored_data_path="."):
+    @property
+    def sr(self):
+        """Get the sample rate."""
+        return self._sr        
+
+    @property
+    def bpm(self):
+        """Get the beats per minute."""
+        return self._bpm
+
+    @property
+    def beats(self):
+        """Get the beat timestamps."""
+        return self._beats
+
+    @property
+    def downbeats(self):
+        """Get the downbeat timestamps."""
+        return self._downbeats
+
+    @property
+    def key(self):
+        """Get the musical key."""
+        return self._key
+
+    @property
+    def segments(self):
+        """Get the segments."""
+        return self._segments
+
+    @segments.setter
+    def segments(self, value):
+        """Set the segments."""
+        self._segments = value
+
+    def get_segments_as_dict(self):
         """
-        Add metronome sounds on the beats.
+        Return the segments as a list of dictionaries.
+        
+        Returns:
+            List of segment dictionaries with start, end, label attributes
+        """
+        return utils.segments_as_dict(self.segments)
+
+    # Track manipulation methods
+    def repitch(self, new_key):
+        """
+        Repitch the track to a target key.
         
         Args:
-            stored_data_path: Path to the directory containing metronome sounds.
+            target_key: The desired key for the track.
         """
-        self.audio = add_metronome(
-            self.audio, 
-            self.sr, 
-            self.beats, 
-            stored_data_path
-        )
+        self.audio = pitch_utils.repitch_audio_to_target(self.audio, self.sr, self.key, new_key)
+        self._key = new_key
+
+    def resample(self, new_sr):
+        """
+        Resample the track to a target sample rate.
+        
+        Args:
+            new_sr: The desired sample rate for the track.
+        """
+        self.audio = librosa.resample(self.audio, orig_sr=self.sr, target_sr=new_sr)
+        self._sr = new_sr
+
+    def change_tempo(self, new_tempo):
+        """
+        Change the tempo of the track.
+        
+        Args:
+            new_tempo: The desired tempo for the track.
+        """
+        self.audio = tempo_utils.time_stretch_audio(self.audio, self.sr, self.bpm, new_tempo)
+        self._bpm = new_tempo
 
     def fuse_consecutive_sections(self, segments, start_after_first_downbeat=True):
         """
@@ -123,50 +182,16 @@ class Track:
         fused.append(current)
         return fused
 
-    def get_segments_as_dict(self):
-        return utils.segments_as_dict(self.segments)
-
-    # def fit_phase(self, target_track):
-    #     """
-    #     Align track phases to a target track's structure.
+    def add_metronome(self, metronome_sound_path="/data/audio/metronome-sounds"):
+        """
+        Add metronome sounds on the beats.
         
-    #     Args:
-    #         target_track: Target Track object to align phases to.
-    #     """
-    #     print(f" ********************** Adjusting the song {self.name}  **********************")
-    #     self.audio, self.beats, self.downbeats = fit_phase(
-    #         self.segments, 
-    #         self.sr, 
-    #         target_track
-    #     )
-
-    # @staticmethod
-    # def get_segments(track_name, stored_data_path="."):
-    #     """
-    #     Get a list of segment labels for a given song.
-        
-    #     Args:
-    #         track_name: Name of the track.
-    #         stored_data_path: Path to stored data directory.
-            
-    #     Returns:
-    #         List of segment labels.
-    #     """
-    #     track = Track.track_from_song(track_name, 'entire', stored_data_path=stored_data_path)
-    #     return [segment.label for segment in track.segments]
-
-    # @staticmethod
-    # def get_segments_full(track_name, stored_data_path="."):
-    #     """
-    #     Get full segment information for a given song.
-        
-    #     Args:
-    #         track_name: Name of the track.
-    #         stored_data_path: Path to stored data directory.
-            
-    #     Returns:
-    #         List of dicts with start, end, and label for each segment.
-    #     """
-    #     track = Track.track_from_song(track_name, 'entire', stored_data_path=stored_data_path)
-    #     return [{'start': segment.start, 'end': segment.end, 'label': segment.label} 
-    #             for segment in track.segments]
+        Args:
+            metronome_sound_path: Path to the directory containing metronome sounds.
+        """
+        self.audio = metronome_utils.add_metronome(
+            self.audio, 
+            self.sr, 
+            self.beats, 
+            metronome_sound_path
+        )

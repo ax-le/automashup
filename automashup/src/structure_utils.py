@@ -3,62 +3,6 @@ import automashup.src.tempo_utils as tempo_utils
 import automashup.src.duration_utils as duration_utils
 import numpy as np
 
-def adapt_this_instrumental_section(vocal_segment_of_interest, instrumental_track, current_index, time_adapt_method='bpm'):
-    """
-    Process a single section:
-        1) find a matching section in the other track
-        2) adapt the tempo of the original track to the tempo of the matching section
-        3) adapt the length of the re-bpm'd track to the length of the matching section
-    
-    Returns:
-        Tuple of (processed audio array, updated current_index)
-    """
-    instrumental_track_segments = instrumental_track.segments
-    instrumental_matching_section, current_index = find_matching_section(vocal_segment_of_interest.label, instrumental_track_segments, current_index)
-    
-    if instrumental_matching_section is None: # Has to be handled in find_matching_section, is not for now. TODO.
-        print(f"No matching section for '{vocal_segment_of_interest.label}'. Using zeros (TODO: inpainting).")
-        # Return zeros with correct sample count
-        return np.zeros(int(vocal_segment_of_interest.duration_samples)), current_index
-    
-    # Extract the segment audio from the original track
-    instrumental_matching_section_audio = instrumental_matching_section.original_audio # instrumental_matching_section.get_audio_segment(instrumental_track)
-    
-    # Accelerate to match tempo
-    match time_adapt_method:
-        case 'bpm':
-            accelerated_instrumental_matching_section_audio = tempo_utils.accelerate_audio(
-                instrumental_matching_section_audio, 
-                instrumental_matching_section.sr, 
-                instrumental_matching_section.bpm,  # Use section BPM, not track BPM
-                vocal_segment_of_interest.bpm
-            )
-            target_length_samples = vocal_segment_of_interest.duration_samples
-            adapted = duration_utils.adapt_audio_duration(accelerated_instrumental_matching_section_audio, target_length_samples, padding_type='repeat')
-            return adapted, current_index
-            
-        case 'downbeats': # May sometimes be a problem if the downbeats that needs to be added slow or accelerate too much, but it's better than nothing
-            audio_barwise = instrumental_matching_section.get_audio_barwise(track=instrumental_track)
-            if len(audio_barwise) == 0:
-                raise ValueError("Empty barwise audio. Should be catched earlier.")
-            accelerated_instrumental_matching_section_audio = tempo_utils.accelerate_to_match_downbeats(
-                audio_barwise, instrumental_matching_section.sr, vocal_segment_of_interest.downbeats_samples  # Property, not method - no ()
-            )
-            
-            # # Fix assertion to compare lengths, and add safety padding
-            # target_length_samples = vocal_segment_of_interest.duration_samples
-            # if len(accelerated_instrumental_matching_section_audio) != target_length_samples: # Actually, differences can happen at the barscale, but may cancel at the songscale
-            #     print(f"DEBUG: Length mismatch: {len(accelerated_instrumental_matching_section_audio)} != {target_length_samples}")
-            #     # Adapt to exact length if rounding caused mismatch
-            #     accelerated_instrumental_matching_section_audio = duration_utils.adapt_audio_duration(
-            #         accelerated_instrumental_matching_section_audio, target_length_samples, padding_type='repeat'
-            #     )
-            
-            return accelerated_instrumental_matching_section_audio, current_index
-            
-        case _:
-            raise ValueError(f"Unknown time adaptation method: {time_adapt_method}")
-
 def find_matching_section(target_label, segments, current_index=0):
     """
     Find a segment with matching label from the list of segments.
@@ -122,7 +66,7 @@ def extract_intro_audio(track, target_bpm):
     intro_audio = track.audio[:intro_frame]
     
     if len(intro_audio) > 0:
-        return tempo_utils.accelerate_audio(intro_audio, track.sr, track.bpm, target_bpm)
+        return tempo_utils.time_stretch_audio(intro_audio, track.sr, track.bpm, target_bpm)
     return np.array([])
 
 def pad_and_align_intro_audios(intro_audios):

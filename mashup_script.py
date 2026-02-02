@@ -76,7 +76,7 @@ def mashup_script(song_path_1, song_path_2, stored_data_folder = default_stored_
     if verbose:
         print("Creating mashups with different techniques...")
         print("Starting with mashup without pitch shifting nor structure alignment.")
-    mashup_result_vanilla = mashupper.mashup_technic(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path)
+    mashup_result_vanilla = mashupper.mashup_adjust_songscale(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path)
 
     # if verbose:
     #     print("Playing the mashup.")
@@ -84,7 +84,7 @@ def mashup_script(song_path_1, song_path_2, stored_data_folder = default_stored_
 
     if verbose:
         print("Mashup with repitching the vocal to the instrumental key, but no structure alignment.")
-    mashup_result_repitch_vocals_to_instrumental = mashupper.mashup_technic(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path, repitch='vocals_to_instrumental')
+    mashup_result_repitch_vocals_to_instrumental = mashupper.mashup_adjust_songscale(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path, repitch='vocals_to_instrumental')
 
     # if verbose:
     #     print("Playing the mashup.")
@@ -92,7 +92,7 @@ def mashup_script(song_path_1, song_path_2, stored_data_folder = default_stored_
     
     if verbose:
         print("Mashup with repitching the instrumental to the vocal key, but no structure alignment.")
-    mashup_result_repitch_instrumental_to_vocals = mashupper.mashup_technic(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path, repitch='instrumental_to_vocals')
+    mashup_result_repitch_instrumental_to_vocals = mashupper.mashup_adjust_songscale(vocal_track=deepcopy(mashup_vocals), instrumental_tracks=[deepcopy(mashup_bass), deepcopy(mashup_drums), deepcopy(mashup_other)], save_folder_path = default_save_mashup_path, repitch='instrumental_to_vocals')
     
     # if verbose:
     #     print("Playing the mashup.")

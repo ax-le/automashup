@@ -9,7 +9,7 @@ import numpy as np
 
 import automashup.src.duration_utils as duration_utils
 
-def add_metronome(audio: np.ndarray, sr: int, beats: list, stored_data_path: str = ".") -> np.ndarray:
+def add_metronome(audio: np.ndarray, sr: int, beats: list, metronome_sound_path: str = "/data/audio/metronome-sounds") -> np.ndarray:
     """
     Add metronome click sounds to an audio array at beat positions.
     
@@ -17,14 +17,14 @@ def add_metronome(audio: np.ndarray, sr: int, beats: list, stored_data_path: str
         audio: Audio array to add metronome to.
         sr: Sample rate of the audio.
         beats: List of beat times in seconds.
-        stored_data_path: Path to the directory containing metronome sounds.
+        metronome_sound_path: Path to the directory containing metronome sounds.
         
     Returns:
         Audio array with metronome sounds added.
     """
     # Load metronome sounds
-    downbeat_sound_audio, _ = librosa.load(f"{stored_data_path}/metronome-sounds/block.mp3")
-    otherbeat_sound_audio, _ = librosa.load(f"{stored_data_path}/metronome-sounds/drumstick.mp3")
+    downbeat_sound_audio, _ = librosa.load(f"{metronome_sound_path}/block.mp3")
+    otherbeat_sound_audio, _ = librosa.load(f"{metronome_sound_path}/drumstick.mp3")
 
     # Make a copy to avoid modifying the original
     result = audio.copy()

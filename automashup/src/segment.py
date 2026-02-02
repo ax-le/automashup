@@ -3,9 +3,11 @@ import copy
 import pyrubberband as pyrb
 import warnings
 
-class Segment:
+import automashup.src.tempo_utils as tempo_utils
+import automashup.src.duration_utils as duration_utils
+import automashup.src.pitch_utils as pitch_utils
 
-    transition_time = 0.5 # transition time in seconds
+class Segment:
 
     def __init__(self, segment_dict):
         # We create a segment from a dict coming from metadata.
@@ -127,42 +129,6 @@ class Segment:
         else:
             raise ValueError("Sample rate not set in segment object.")
 
-    def set_key(self, new_key, new_audio=None): # To be modified with the song.
-        """
-        Set the musical key for this segment.
-
-        Args:
-            new_key: The new musical key value.
-        """
-        self._key = new_key
-        if new_audio is not None:
-            self.audio = new_audio
-        else:
-            self.audio_was_modified = True
-            self.audio = None
-
-    def set_bpm(self, new_bpm, new_audio=None): #, recalculate_downbeats=False):
-        """
-        Set the BPM/tempo for this segment.
-
-        Args:
-            new_bpm: The new BPM value.
-            recalculate_downbeats: If True, invalidate downbeats (they need recalculation).
-        """
-        raise NotImplementedError("Set BPM not implemented yet, as the modification of downbeats is not implemented yet.")
-        self._bpm = new_bpm
-        if new_audio is not None:
-            self.audio = new_audio
-        else:
-            self.audio_was_modified = True
-            self.audio = None
-
-        # # When BPM changes, downbeats may no longer be valid
-        # if recalculate_downbeats:
-        #     self._downbeats = None  # Mark as invalid - requires recalculation
-        # else:
-        #     raise NotImplementedError("Recalculate downbeats not set. This is TODO.")
-
     def set_downbeats(self, new_downbeats):
         """
         Set the downbeats for this segment.
@@ -202,45 +168,67 @@ class Segment:
 
         # Store downbeats that fall within this segment (absolute times)
         # Used for downbeat-based tempo alignment in mashup_by_section
-        last_i = 0
-        db_to_add = []
-        for i in range(len(track.downbeats)):
-            if self._start <= track.downbeats[i] < self._end:
+        last_i = 0 # local variable to also get the next downbeat
+        db_to_add = [] # list of downbeats to add
+        for i in range(len(track.downbeats)): # parsing the downbeats
+            if self._start <= track.downbeats[i] < self._end: # if the downbeat is within the segment
                 db_to_add.append(track.downbeats[i])
                 last_i = i
-        try:
-            db_to_add.append(track.downbeats[last_i+1]) # We add the first downbeat outside of the box, corresponding to the first beat of the next segment.
-        except IndexError: # Probably the last one
-            if last_i+1 != len(track.downbeats):
+        try: # We add the first downbeat outside of the box, corresponding to the first beat of the next segment.
+            db_to_add.append(track.downbeats[last_i+1])
+        except IndexError: # Failed because it was (probably) the last segment, but try to catch it if it was not.
+            if last_i+1 != len(track.downbeats): # If it was not the last segment, raise an error.
                 raise ValueError(f"DEBUG: Last index {last_i+1} out of bounds for track {track.name} in downbeats {track.downbeats} of size {len(track.downbeats)}")
-            if track.downbeats[-1] not in db_to_add:
+            if track.downbeats[-1] not in db_to_add: # If it was the last segment, add the last downbeat.
                 db_to_add.append(track.downbeats[-1])
         
+        # If less than 2 downbeats found, we cannot make a bar. Hence, consider this section invalid.
         if db_to_add == [] or len(db_to_add) == 1:
             warnings.warn(f"Less than 2 downbeats found in segment {self} for track {track.name}, cannot make a bar.")
             self._downbeats = None
             self._downbeats_samples = None
-        else:
-            self._downbeats = np.array(db_to_add)
-            self._downbeats_samples = np.array([
-                int(db * self.sr) for db in self._downbeats
-            ])
+        else: # If there are at least 2 downbeats, we can make a bar. Then, it's ok.
+            self.set_downbeats(db_to_add)
 
-    def get_audio_segment(self, track=None):
+    def time_stretch_this_section(self, ref_section, time_adapt_method='bpm'):
+        # Time stretch to match tempo
+        match time_adapt_method:
+            case 'bpm':
+                stretched_original_section_audio = tempo_utils.time_stretch_audio(
+                    self.audio, 
+                    self.sr, 
+                    self.bpm,
+                    ref_section.bpm
+                )
+                self._bpm = ref_section.bpm
+                self._downbeats = None # We don't have downbeats anymore, we just have a tempo.
+                self._downbeats_samples = None # We don't have downbeats anymore, we just have a tempo.
+
+                # Time stretch to match duration
+                target_length_samples = ref_section.duration_samples
+                duration_adapted_audio = duration_utils.adapt_audio_duration(stretched_original_section_audio, target_length_samples, padding_type='repeat')
+                self.audio = duration_adapted_audio
+                
+            case 'downbeats': # May sometimes be a problem if the downbeats that needs to be added slow or accelerate too much, but it's better than nothing
+                audio_barwise = self.get_audio_barwise()
+                if len(audio_barwise) == 0:
+                    raise ValueError("Empty barwise audio. Should be catched earlier.")
+                stretched_original_section_audio = tempo_utils.time_stretch_to_match_downbeats(
+                    audio_barwise, self.sr, ref_section.downbeats_samples  # Property, not method - no ()
+                )
+                self.set_downbeats(ref_section.downbeats)
+                self._bpm = None # We don't have a single bpm for the section anymore.
+                self.audio = stretched_original_section_audio # We don't adapt the duration because downbeats are already absolute times, so the length is already adapted (not at the section level, but at the song level).
+
+    def repitch(self, new_key):
         """
-        Get the audio segment from the track.
-
+        Repitch the track to a target key.
+        
         Args:
-            track: The track to get the audio segment from.
+            target_key: The desired key for the track.
         """
-        if self.audio_was_modified:
-            if track is None:
-                raise ValueError("The audio was modified (bpm or key change), so you must provide the newly modified track.")
-            return track.audio[self._start_samples:self._end_samples]
-        else:
-            if self.audio is None:
-                raise ValueError("Audio not found. Call associate_track_info() first.")
-            return self.audio
+        self.audio = pitch_utils.repitch_audio_to_target(self.audio, self.sr, self.key, new_key)
+        self._key = new_key
 
     def offset_segment(self, offset_time = None, offset_samples = None):
         """
@@ -260,7 +248,7 @@ class Segment:
         self.set_start(self._start + offset_time)
         self.set_downbeats(np.array([db + offset_time for db in self._downbeats]))
 
-    def get_audio_barwise(self, track=None):
+    def get_audio_barwise(self):
         """
         Get the audio segments from the track, barwise (i.e. partioning the signal for each bar).
 
@@ -269,11 +257,10 @@ class Segment:
         """
         audio_segments = []
         offset_samples = self._start_samples
-        audio = self.get_audio_segment(track)
         for i in range(len(self._downbeats_samples)-1):
             db_start_samples = self._downbeats_samples[i] # Starting the bar on a downbeat
             db_end_samples = self._downbeats_samples[i+1] # Ending the bar on the next downbeat
-            audio_segments.append(audio[db_start_samples-offset_samples:db_end_samples-offset_samples]) # This is because the downbeats are absolute times, but the original audio is a slice of the track.
+            audio_segments.append(self.audio[db_start_samples-offset_samples:db_end_samples-offset_samples]) # This is because the downbeats are absolute times, but the original audio is a slice of the track.
             # if self.audio_was_modified:
             #     if track is None:
             #         raise ValueError("The audio was modified (bpm or key change), so you must provide the newly modified track.")
@@ -282,3 +269,19 @@ class Segment:
             #     assert self.audio is not None, "Audio not found in segment object.."
             #     audio_segments.append(self.audio[db_start_samples-offset_samples:db_end_samples-offset_samples]) # This is because the downbeats are absolute times, but the original audio is a slice of the track.
         return audio_segments
+
+    def get_audio_segment(self, track=None):
+        """
+        Get the audio segment from the track.
+
+        Args:
+            track: The track to get the audio segment from.
+        """
+        if self.audio_was_modified:
+            if track is None:
+                raise ValueError("The audio was modified (bpm or key change), so you must provide the newly modified track.")
+            return track.audio[self._start_samples:self._end_samples]
+        else:
+            if self.audio is None:
+                raise ValueError("Audio not found. Call associate_track_info() first.")
+            return self.audio

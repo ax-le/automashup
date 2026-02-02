@@ -375,72 +375,136 @@ class TestSegmentSetEnd(unittest.TestCase):
 
 
 
-class TestSegmentSetKey(unittest.TestCase):
+class TestSegmentRepitch(unittest.TestCase):
 
 
 
-    """Tests for the set_key method."""
-
-
-
-
-    def test_set_key_without_audio(self):
-
-
-
-        """Test setting key without providing new audio."""
-
-
-
-        segment = Segment({"start": 0.0, "end": 5.0, "label": "verse"})
-
-
-
-        segment.set_key("A minor")
-        
-
-
-
-        self.assertEqual(segment.key, "A minor")
-
-
-
-        self.assertTrue(segment.audio_was_modified)
-
-
-
-        self.assertIsNone(segment.audio)
+    """Tests for the repitch method."""
 
 
 
 
-    def test_set_key_with_audio(self):
+    def test_repitch_updates_key(self):
 
 
 
-        """Test setting key with new audio."""
+        """Test that repitch updates the segment key."""
+
+
+
+        from unittest.mock import patch, MagicMock
 
 
 
         segment = Segment({"start": 0.0, "end": 5.0, "label": "verse"})
 
+        segment.sr = 44100
+
+        segment._key = "C major"
+
+        segment.audio = np.array([1, 2, 3, 4, 5])
 
 
-        new_audio = np.array([1, 2, 3, 4, 5])
+
+        with patch('automashup.src.pitch_utils.repitch_audio_to_target') as mock_repitch:
+
+            mock_repitch.return_value = np.array([1, 2, 3, 4, 5])
+
+            
+
+            segment.repitch("G major")
+
+            
+
+            self.assertEqual(segment.key, "G major")
+
+            mock_repitch.assert_called_once()
 
 
 
-        segment.set_key("G major", new_audio=new_audio)
+
+    def test_repitch_updates_audio(self):
+
+
+
+        """Test that repitch updates the audio data."""
+
+
+
+        from unittest.mock import patch
+
+
+
+        segment = Segment({"start": 0.0, "end": 5.0, "label": "verse"})
+
+        segment.sr = 44100
+
+        segment._key = "C major"
+
+        segment.audio = np.array([1, 2, 3, 4, 5])
+
         
 
-
-
-        self.assertEqual(segment.key, "G major")
+        new_audio = np.array([10, 20, 30, 40, 50])
 
 
 
-        np.testing.assert_array_equal(segment.audio, new_audio)
+        with patch('automashup.src.pitch_utils.repitch_audio_to_target') as mock_repitch:
 
+            mock_repitch.return_value = new_audio
+
+            
+
+            segment.repitch("A minor")
+
+            
+
+            np.testing.assert_array_equal(segment.audio, new_audio)
+
+
+
+
+    def test_repitch_calls_with_correct_args(self):
+
+
+
+        """Test that repitch passes correct arguments to pitch utility."""
+
+
+
+        from unittest.mock import patch
+
+
+
+        segment = Segment({"start": 0.0, "end": 5.0, "label": "verse"})
+
+        segment.sr = 44100
+
+        segment._key = "D major"
+
+        segment.audio = np.array([1, 2, 3])
+
+
+
+        with patch('automashup.src.pitch_utils.repitch_audio_to_target') as mock_repitch:
+
+            mock_repitch.return_value = np.array([1, 2, 3])
+
+            
+
+            segment.repitch("E minor")
+
+            
+
+            args = mock_repitch.call_args[0]
+
+            np.testing.assert_array_equal(args[0], np.array([1, 2, 3]))  # audio
+
+            self.assertEqual(args[1], 44100)  # sr
+
+            self.assertEqual(args[2], "D major")  # original key
+
+            self.assertEqual(args[3], "E minor")  # new key
 
 
 
@@ -1324,6 +1388,226 @@ class TestSegmentOffsetSegment(unittest.TestCase):
             self.segment.offset_segment()
 
 
+
+
+
+class TestSegmentTimeStretchThisSection(unittest.TestCase):
+
+
+
+    """Tests for the time_stretch_this_section method."""
+
+
+
+
+    def setUp(self):
+
+
+
+        """Create segments for testing."""
+
+
+
+        self.segment = Segment({"start": 0.0, "end": 4.0, "label": "verse"})
+
+        self.segment.sr = 44100
+
+        self.segment._bpm = 100.0
+
+        self.segment.audio = np.random.randn(44100 * 4)
+
+        self.segment._duration_samples = 44100 * 4
+
+        self.segment._downbeats_samples = np.array([0, 44100, 88200, 132300, 176400])
+
+        self.segment._downbeats = np.array([0.0, 1.0, 2.0, 3.0, 4.0])
+
+
+
+        # Create reference segment
+
+        self.ref_segment = MagicMock()
+
+        self.ref_segment.bpm = 120.0
+
+        self.ref_segment.duration_samples = 44100 * 3
+
+        self.ref_segment.downbeats_samples = np.array([0, 33075, 66150, 99225, 132300])
+
+        self.ref_segment.downbeats = np.array([0.0, 0.75, 1.5, 2.25, 3.0])
+
+
+
+
+    def test_time_stretch_bpm_method_updates_bpm(self):
+
+
+
+        """Test that bpm method correctly updates the segment BPM."""
+
+
+
+        from unittest.mock import patch
+
+
+
+        with patch('automashup.src.tempo_utils.time_stretch_audio') as mock_stretch, \
+             patch('automashup.src.duration_utils.adapt_audio_duration') as mock_adapt:
+            mock_stretch.return_value = np.random.randn(44100 * 3)
+
+            mock_adapt.return_value = np.random.randn(44100 * 3)
+
+            
+
+            self.segment.time_stretch_this_section(self.ref_segment, time_adapt_method='bpm')
+
+            
+
+            self.assertEqual(self.segment.bpm, 120.0)
+
+            mock_stretch.assert_called_once()
+
+
+
+
+    def test_time_stretch_bpm_method_updates_audio(self):
+
+
+
+        """Test that bpm method stretches and adapts the audio."""
+
+
+
+        from unittest.mock import patch
+
+
+
+        expected_audio = np.random.randn(44100 * 3)
+
+
+
+        with patch('automashup.src.tempo_utils.time_stretch_audio') as mock_stretch, \
+             patch('automashup.src.duration_utils.adapt_audio_duration') as mock_adapt:
+            mock_stretch.return_value = np.random.randn(44100 * 3)
+
+            mock_adapt.return_value = expected_audio
+
+            
+
+            self.segment.time_stretch_this_section(self.ref_segment, time_adapt_method='bpm')
+
+            
+
+            np.testing.assert_array_equal(self.segment.audio, expected_audio)
+
+
+
+
+    def test_time_stretch_bpm_method_clears_downbeats(self):
+
+
+
+        """Test that bpm method clears downbeats since timing changes."""
+
+
+
+        from unittest.mock import patch
+
+
+
+        with patch('automashup.src.tempo_utils.time_stretch_audio') as mock_stretch, \
+             patch('automashup.src.duration_utils.adapt_audio_duration') as mock_adapt:
+            mock_stretch.return_value = np.random.randn(44100 * 3)
+
+            mock_adapt.return_value = np.random.randn(44100 * 3)
+
+            
+
+            self.segment.time_stretch_this_section(self.ref_segment, time_adapt_method='bpm')
+
+            
+
+            self.assertIsNone(self.segment.downbeats)
+
+            self.assertIsNone(self.segment.downbeats_samples)
+
+
+
+
+    def test_time_stretch_downbeats_method_updates_audio(self):
+
+
+
+        """Test that downbeats method stretches audio bar-by-bar."""
+
+
+
+        from unittest.mock import patch
+
+
+
+        self.segment._downbeats_samples = np.array([0, 44100, 88200, 132300, 176400])
+
+        self.segment._start_samples = 0
+
+        
+
+        # Setup audio so get_audio_barwise works
+
+        expected_audio = np.random.randn(44100 * 3)
+
+
+
+        with patch('automashup.src.tempo_utils.time_stretch_to_match_downbeats') as mock_stretch:
+
+            mock_stretch.return_value = expected_audio
+
+            
+
+            self.segment.time_stretch_this_section(self.ref_segment, time_adapt_method='downbeats')
+
+            
+
+            mock_stretch.assert_called_once()
+
+            np.testing.assert_array_equal(self.segment.audio, expected_audio)
+
+
+
+
+    def test_time_stretch_downbeats_method_updates_downbeats(self):
+
+
+
+        """Test that downbeats method sets new downbeats from reference."""
+
+
+
+        from unittest.mock import patch
+
+
+
+        self.segment._downbeats_samples = np.array([0, 44100, 88200, 132300, 176400])
+
+        self.segment._start_samples = 0
+
+
+
+        with patch('automashup.src.tempo_utils.time_stretch_to_match_downbeats') as mock_stretch:
+
+            mock_stretch.return_value = np.random.randn(44100 * 3)
+
+            
+
+            self.segment.time_stretch_this_section(self.ref_segment, time_adapt_method='downbeats')
+
+            
+
+            np.testing.assert_array_equal(self.segment.downbeats, self.ref_segment.downbeats)
+
+            # BPM should be None when using downbeats method
+
+            self.assertIsNone(self.segment.bpm)
 
 
 

@@ -1,10 +1,14 @@
+"""Unit tests for structure_utils module.
+
+Tests cover section matching, intro extraction, and instrumental section adaptation
+for mashup creation.
+"""
 import unittest
 import numpy as np
 from unittest.mock import MagicMock, patch
 
 from automashup.src.structure_utils import (
     find_matching_section,
-    adapt_this_instrumental_section,
     extract_intro_audio,
     pad_and_align_intro_audios
 )
@@ -106,13 +110,13 @@ class TestExtractIntroAudio(unittest.TestCase):
         track.downbeats = [1.0, 2.0, 3.0]  # First downbeat at 1 second
         track.audio = np.arange(44100 * 3)  # 3 seconds of audio
 
-        with patch('automashup.src.structure_utils.tempo_utils.accelerate_audio') as mock_accel:
-            mock_accel.return_value = np.arange(44100)
+        with patch('automashup.src.structure_utils.tempo_utils.time_stretch_audio') as mock_stretch:
+            mock_stretch.return_value = np.arange(44100)
             result = extract_intro_audio(track, target_bpm=100.0)
             
-            # Should call accelerate_audio with the intro portion
-            mock_accel.assert_called_once()
-            call_args = mock_accel.call_args[0]
+            # Should call time_stretch_audio with the intro portion
+            mock_stretch.assert_called_once()
+            call_args = mock_stretch.call_args[0]
             self.assertEqual(len(call_args[0]), 44100)  # 1 second of intro
             self.assertEqual(call_args[1], 44100)  # sr
             self.assertEqual(call_args[2], 120.0)  # orig_tempo
@@ -171,77 +175,6 @@ class TestPadAndAlignIntroAudios(unittest.TestCase):
 
         np.testing.assert_array_equal(result[0], intro1)
         np.testing.assert_array_equal(result[1], intro2)
-
-
-class TestAdaptThisInstrumentalSection(unittest.TestCase):
-    """Tests for the adapt_this_instrumental_section function."""
-
-    def setUp(self):
-        """Create mock objects for testing."""
-        self.vocal_segment = MagicMock()
-        self.vocal_segment.label = 'verse'
-        self.vocal_segment.duration_samples = 44100
-        self.vocal_segment.bpm = 120.0
-        self.vocal_segment.downbeats_samples = np.array([0, 22050, 44100])
-        
-        self.instrumental_segment = MagicMock()
-        self.instrumental_segment.label = 'verse'
-        self.instrumental_segment.original_audio = np.random.randn(44100)
-        self.instrumental_segment.sr = 44100
-        self.instrumental_segment.bpm = 100.0
-        
-        self.instrumental_track = MagicMock()
-        self.instrumental_track.segments = [self.instrumental_segment]
-
-    def test_adapt_with_bpm_method(self):
-        """Test adaptation using bpm method."""
-        with patch('automashup.src.structure_utils.tempo_utils.accelerate_audio') as mock_accel, \
-             patch('automashup.src.structure_utils.duration_utils.adapt_audio_duration') as mock_adapt:
-            mock_accel.return_value = np.random.randn(44100)
-            mock_adapt.return_value = np.random.randn(44100)
-            
-            result, new_index = adapt_this_instrumental_section(
-                self.vocal_segment,
-                self.instrumental_track,
-                current_index=0,
-                time_adapt_method='bpm'
-            )
-            
-            mock_accel.assert_called_once()
-            mock_adapt.assert_called_once()
-            self.assertEqual(len(result), 44100)
-            self.assertEqual(new_index, 1)
-
-    def test_adapt_with_downbeats_method(self):
-        """Test adaptation using downbeats method."""
-        self.instrumental_segment.get_audio_barwise = MagicMock(
-            return_value=np.array([[1, 2, 3], [4, 5, 6]])
-        )
-        
-        with patch('automashup.src.structure_utils.tempo_utils.accelerate_to_match_downbeats') as mock_accel, \
-             patch('automashup.src.structure_utils.duration_utils.adapt_audio_duration') as mock_adapt:
-            mock_accel.return_value = np.random.randn(44100)
-            mock_adapt.return_value = np.random.randn(44100)
-            
-            result, new_index = adapt_this_instrumental_section(
-                self.vocal_segment,
-                self.instrumental_track,
-                current_index=0,
-                time_adapt_method='downbeats'
-            )
-            
-            mock_accel.assert_called_once()
-            self.assertEqual(new_index, 1)
-
-    def test_adapt_with_unknown_method_raises_error(self):
-        """Test that unknown method raises ValueError."""
-        with self.assertRaises(ValueError):
-            adapt_this_instrumental_section(
-                self.vocal_segment,
-                self.instrumental_track,
-                current_index=0,
-                time_adapt_method='unknown'
-            )
 
 
 if __name__ == '__main__':
