@@ -51,11 +51,10 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
             add_to_save_name += "_repitch_vocals_to_instrumental"
         case 'instrumental_to_vocals': # Repitch the instrumental tracks to match the vocal track's key
             mashup_key = vocal_track.key
-            for track in instrumental_tracks:
-                if track.key != mashup_key: # We save computation time if the key is already the same.
+            for i in range(len(instrumental_tracks)):
+                if instrumental_tracks[i].key != mashup_key: # We save computation time if the key is already the same.
                     # if track.instrument != 'drums': # Don't repitch drums?
-                    track.audio = pitch_utils.repitch_audio_to_target(track.audio, track.sr, track.key, mashup_key)
-                    track.key = mashup_key
+                    instrumental_tracks[i].repitch(mashup_key)
             add_to_save_name += "_repitch_instrumental_to_vocals"
         case _:
             raise ValueError(f"Invalid repitch value: {repitch}")
@@ -75,13 +74,13 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
     )
 
     # Starting the song on the first downbeat
-    audio_vocal_cropped = vocal_track.audio[:int(vocal_track.downbeats[0] * vocal_track.sr)]
+    audio_vocal_cropped = vocal_track.audio[int(vocal_track.downbeats[0] * vocal_track.sr):]
 
     # Adjusting the instrumental tracks to match the vocal track
     inst_tracks_audio = []
     for track in instrumental_tracks:
         # Starting the song on the first downbeat
-        track.audio = track.audio[:int(track.downbeats[0] * track.sr)] # inplace modification because the following functions are inplace
+        track.audio = track.audio[int(track.downbeats[0] * track.sr):] # inplace modification because the following functions are inplace
 
         # Resample if needed
         if track.sr != mashup.sr:
@@ -94,7 +93,7 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
     mashup.audio = mixing.additive_mix(audio_vocal_cropped, inst_tracks_audio)
 
     # Normalize the mashup to the target loudness (-14 LUFS by deafult)
-    mashup.audio = postprocessing.normalize_lufs(mashup.audio, mashup_sr, target_lufs=target_loudness)
+    mashup.audio = postprocessing.normalize_lufs(mashup.audio, mashup.sr, target_lufs=target_loudness)
 
     if save_folder_path:
         # Save audio
@@ -136,7 +135,7 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
     )
 
     # Collect adapted instrumental sections for each vocal segment
-    set_of_segments = [[] for _ in instrumental_tracks]
+    instrumental_audio_sections = [[] for _ in instrumental_tracks]
     label_counts = [{} for _ in instrumental_tracks]
     
     # Filter vocal segments to only those ending after the first downbeat
@@ -157,6 +156,8 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
     crop_vocal = vocal_track.audio[int(start_song):]
 
     for vocal_section in vocal_segments_after_first_downbeat:
+        if time_adapt_method == 'downbeats' and (vocal_section.downbeats_samples is None or len(vocal_section.downbeats_samples) < 2): # Empty reference segment
+            continue
         for i, inst_track in enumerate(instrumental_tracks):
             # Get the number of times this label has appeared in the instrumental track so far
             current_index_before_increment = label_counts[i].get(vocal_section.label, 0)
@@ -183,13 +184,26 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
 
     # Mix main sections
     if len(crop_vocal) != len(main_sections_instrumental[0]):
-        warnings.warn(f"Length mismatch between vocal final main section ({len(crop_vocal)}) and instrumental final main sections ({len(main_sections_instrumental[0])}). Not a problem if both lengths are close, may be if they are too different (gap: {abs(len(crop_vocal) - len(main_sections_instrumental[0]))} samples, i.e. {abs(len(crop_vocal) - len(main_sections_instrumental[0])) / mashup_sr} seconds).")
+        length_mismatch_seconds = abs(len(crop_vocal) - len(main_sections_instrumental[0])) / mashup.sr
+        if length_mismatch_seconds > 1:
+            warnings.warn(f"Length mismatch between vocal final main section ({len(crop_vocal)}) and instrumental final main sections ({len(main_sections_instrumental[0])}). Not a problem if both lengths are close, may be if they are too different (gap: {abs(len(crop_vocal) - len(main_sections_instrumental[0]))} samples, i.e. {length_mismatch_seconds} seconds).")
     mixed_main_sections = mixing.additive_mix(crop_vocal, main_sections_instrumental)
     
     # We may want to add the original instrumental intro of the song
     if adding_intros:
         # Extract intros
-        intro_audios = [structure_utils.extract_intro_audio(t, mashup_bpm) for t in instrumental_tracks]
+        intro_audios = [structure_utils.extract_intro_audio(t, mashup.bpm) for t in instrumental_tracks]
+
+        # Repitch the instrumental section to the vocal section
+        if repitch == 'instrumental_to_vocals':
+            for i in range(len(intro_audios)):
+                vocal_first_key = vocal_segments_after_first_downbeat[0].key
+                intro_key = instrumental_tracks[i].key # Assume the key of the entire song.
+                intro_sr = instrumental_tracks[i].sr
+                if intro_key != vocal_first_key: 
+                    # if inst_track.instrument != 'drums': # Don't repitch drums?
+                    intro_audios[i] = pitch_utils.repitch_audio_to_target(intro_audios[i], intro_sr, intro_key, vocal_first_key)
+
         # Pad and align the instrumental intros together
         padded_intro_audios = structure_utils.pad_and_align_intro_audios(intro_audios)
         # Mix intros together
@@ -202,7 +216,7 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
         final_song = mixed_main_sections
 
     # Normalize the mashup to the target loudness
-    final_song = postprocessing.normalize_lufs(final_song, mashup_sr, target_loudness)
+    final_song = postprocessing.normalize_lufs(final_song, mashup.sr, target_loudness)
 
     mashup.audio = final_song
 
