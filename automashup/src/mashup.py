@@ -164,18 +164,19 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
 
             # Find the matching section in the instrumental track
             inst_section, current_index_after_increment = structure_utils.find_matching_section(vocal_section.label, inst_track.segments, current_index_before_increment)
-            inst_section.time_stretch_this_section(ref_section=vocal_section, time_adapt_method=time_adapt_method)
 
-            if inst_section.audio is None: # Should not happen
-                raise ValueError(f"Instrumental section audio is empty for section {vocal_section.label} for instrumental track {inst_track.name}")
-            
             # Repitch the instrumental section to the vocal section
-            if repitch == 'instrumental_to_vocals' and inst_track.key != vocal_section.key: 
+            if repitch == 'instrumental_to_vocals' and inst_section.key != vocal_section.key: 
                 # if inst_track.instrument != 'drums': # Don't repitch drums?
                 inst_section.repitch(vocal_section.key)
 
+            this_sec_audio_adapted = inst_section.time_stretch_this_section(ref_section=vocal_section, time_adapt_method=time_adapt_method)
+
+            if this_sec_audio_adapted is None: # Should not happen
+                raise ValueError(f"Instrumental section audio is empty for section {vocal_section.label} for instrumental track {inst_track.name}")
+            
             # Append the adapted instrumental section to the list of instrumental sections
-            instrumental_audio_sections[i].append(inst_section.audio)
+            instrumental_audio_sections[i].append(this_sec_audio_adapted)
             # Update the number of times this label has appeared in the instrumental track. May have not changed if the label was not found
             label_counts[i][vocal_section.label] = current_index_after_increment
 
