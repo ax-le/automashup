@@ -114,16 +114,6 @@ class Track:
         return utils.segments_as_dict(self.segments)
 
     # Track manipulation methods
-    def repitch(self, new_key):
-        """
-        Repitch the track to a target key.
-        
-        Args:
-            target_key: The desired key for the track.
-        """
-        self.audio = pitch_utils.repitch_audio_to_target(self.audio, self.sr, self.key, new_key)
-        self._key = new_key
-
     def resample(self, new_sr):
         """
         Resample the track to a target sample rate.
@@ -134,15 +124,31 @@ class Track:
         self.audio = librosa.resample(self.audio, orig_sr=self.sr, target_sr=new_sr)
         self._sr = new_sr
 
-    def change_tempo(self, new_tempo):
+    def repitch(self, new_key, overwrite_audio=None):
+        """
+        Repitch the track to a target key.
+        
+        Args:
+            target_key: The desired key for the track.
+        """
+        if overwrite_audio is None:
+            audio_to_repitch = self.audio
+        else:
+            audio_to_repitch = overwrite_audio
+        return pitch_utils.repitch_audio_to_target(audio_to_repitch, self.sr, self.key, new_key)
+
+    def change_tempo(self, new_tempo, overwrite_audio=None):
         """
         Change the tempo of the track.
         
         Args:
             new_tempo: The desired tempo for the track.
         """
-        self.audio = tempo_utils.time_stretch_audio(self.audio, self.sr, self.bpm, new_tempo)
-        self._bpm = new_tempo
+        if overwrite_audio is None:
+            audio_to_stretch = self.audio
+        else:
+            audio_to_stretch = overwrite_audio
+        return tempo_utils.time_stretch_audio(audio_to_stretch, self.sr, self.bpm, new_tempo)
 
     def fuse_consecutive_sections(self, segments, start_after_first_downbeat=True):
         """
@@ -195,7 +201,7 @@ class Track:
         Args:
             metronome_sound_path: Path to the directory containing metronome sounds.
         """
-        self.audio = metronome_utils.add_metronome(
+        return metronome_utils.add_metronome(
             self.audio, 
             self.sr, 
             self.beats, 

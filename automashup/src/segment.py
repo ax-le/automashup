@@ -181,7 +181,19 @@ class Segment:
         else: # If there are at least 2 downbeats, we can make a bar. Then, it's ok.
             self.set_downbeats(db_to_add)
 
-    def time_stretch_this_section(self, ref_section, time_adapt_method='bpm'):
+    def repitch(self, new_key, overwrite_audio=None):
+        """
+        Repitch the track to a target key.
+        
+        Args:
+            target_key: The desired key for the track.
+        """
+        if overwrite_audio is None:
+            return pitch_utils.repitch_audio_to_target(self.original_audio, self.sr, self._original_key, new_key)
+        else:
+            return pitch_utils.repitch_audio_to_target(overwrite_audio, self.sr, self._original_key, new_key)
+
+    def time_stretch_this_section(self, ref_section, time_adapt_method='bpm', overwrite_audio=None):
         """
         Time stretch the segment to match the tempo and duration of the reference section.
         No inplace modification of the segment, because a same segment can be used in multiple parts of the mashup,
@@ -191,12 +203,18 @@ class Segment:
             ref_section: The reference section to match the tempo and duration of.
             time_adapt_method: The method to use for time stretching.
         """
-        match time_adapt_method:
-            case 'bpm':
+        match time_adapt_method: # Perform time stretching based on the method
+            case 'bpm': # Adapt each section tempo-wise.
+
+                if overwrite_audio is None: # If no audio is provided, take the initial audio (from the init)
+                    audio_to_stretch = self.audio
+                else: # If audio is provided, use it. (e.g. if it has been repitched.)
+                    audio_to_stretch = overwrite_audio
+                
                 stretched_original_section_audio = tempo_utils.time_stretch_audio(
-                    self.audio, # Use the current audio, because repitching concerns audio only.
+                    audio_to_stretch, # Use the current audio, because repitching concerns audio only.
                     self.sr, 
-                    self.bpm,
+                    self.bpm, # Note: the tempo of the section is the tempo of the track it belongs to. TODO: tempo estimation per section.
                     ref_section.bpm
                 )
 
@@ -204,32 +222,23 @@ class Segment:
                 target_length_samples = ref_section.duration_samples
                 return duration_utils.adapt_audio_duration(stretched_original_section_audio, target_length_samples, padding_type='repeat')
                 
-            case 'downbeats': # May sometimes be a problem if the downbeats that needs to be added slow or accelerate too much, but it's better than nothing
-                audio_barwise = self.get_audio_barwise()
-                if len(audio_barwise) == 0:
+            case 'downbeats': # Align the downbeats of the section with the downbeats of the reference section.
+                # This is done by splitting the audio into bars and then stretching each bar to match the duration of the corresponding bar in the reference section.
+                audio_barwise = self.get_audio_barwise(overwrite_audio=overwrite_audio) # Get the audio barwise.
+
+                if len(audio_barwise) == 0: # Error catching: barwise_audio is empty.
                     raise ValueError("Empty barwise audio. Should be catched earlier.")
-                for a_bar in audio_barwise:
+                for a_bar in audio_barwise: # Error catching: barwise_audio contains empty bars.
                     if len(a_bar) == 0:
-                        raise ValueError("Empty barwise audio. Should be catched earlier.")
+                        raise ValueError("A bar is empty in barwise_audio. Should be catched earlier.")
+                
+                # Time stretch each bar to match the duration of the corresponding bar in the reference section.
                 return tempo_utils.time_stretch_to_match_downbeats(
                     audio_barwise, self.sr, ref_section.downbeats_samples
-                )
+                ) 
 
             case _:
                 raise ValueError(f"Unknown time adapt method: {time_adapt_method}")
-
-    def repitch(self, new_key):
-        """
-        Repitch the track to a target key.
-        
-        Args:
-            target_key: The desired key for the track.
-        """
-        # We repitch the original audio, not the current audio, because the current audio may have been repitched already.
-        # This is important because the segment can be used multiple times in the mashup, and hence repitched multiple times.
-        # Because repithcing alters the audio, we want to start from the original audio each time, instead of accumulating repitchings.
-        self.audio = pitch_utils.repitch_audio_to_target(self.original_audio, self.sr, self._original_key, new_key)
-        self._key = new_key
 
     def offset_segment(self, offset_time = None, offset_samples = None):
         """
@@ -249,34 +258,47 @@ class Segment:
         self.set_start(self._start + offset_time)
         self.set_downbeats(np.array([db + offset_time for db in self._downbeats]))
 
-    def get_audio_barwise(self):
+    def get_audio_barwise(self, overwrite_audio=None):
         """
         Get the audio segments from the track, barwise (i.e. partioning the signal for each bar).
 
         Args:
             track: The track to get the audio segment from.
         """
-        audio_segments = []
-        offset_samples = self._start_samples
+        # If overwrite_audio is provided, use it. Otherwise, use the current audio.
+        # Useful when the audio has been repitched, typically.
+        # Careful if time-stretched: the downbeats are not updated, so the audio will be cut at the wrong place.
+        if overwrite_audio is None:
+            audio_to_use = self.audio
+        else:
+            audio_to_use = overwrite_audio
+
+        audio_segments = [] # Store all segments
+
+        # Offset samples, because the first sample of the track is indexed by 0, not its absolute position in the track.
+        offset_samples = self._start_samples 
+
+        # Parse all downbeats (2 downbeats delimit a bar)
         for i in range(len(self._downbeats_samples)-1):
             db_start_samples = self._downbeats_samples[i] # Starting the bar on a downbeat
             db_end_samples = self._downbeats_samples[i+1] # Ending the bar on the next downbeat
 
-            # Add the audio, to account for repitching (which is inplace)
-            # Don't store the results, because the segment can be used multiple times in the mashup.
-            audio_to_add = self.audio[db_start_samples-offset_samples:db_end_samples-offset_samples]
-            if audio_to_add.shape[0] != 0: # Do not add empty bars, if any
+            # Select the audio for the current bar
+            audio_to_add = audio_to_use[db_start_samples-offset_samples:db_end_samples-offset_samples]
+
+            # Do not add empty bars, if any. TODO: Should we add a warning?
+            if audio_to_add.shape[0] != 0: 
                 audio_segments.append(audio_to_add)
         return audio_segments
 
     def get_downbeats_in_segment(self, downbeats):
         """
         Get the downbeats that fall within this segment.
+        Used for downbeat-based tempo alignment in mashup_by_section
 
         Args:
             downbeats: The downbeats to get the downbeats from.
         """
-        # Used for downbeat-based tempo alignment in mashup_by_section
         last_i = 0 # local variable to also get the next downbeat, the first outside of this segment. (It ends the bar.)
         db_to_add = [] # list of downbeats to add
         for i in range(len(downbeats)): # parsing the downbeats

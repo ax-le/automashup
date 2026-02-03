@@ -36,23 +36,31 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
     instrumental_tracks = [copy.deepcopy(track) for track in instrumental_tracks_in]
 
     mashup_name = f"{vocal_track.name} - {instrumental_tracks[0].name}_adjust_songscale"
+
+    # Init initial audio variables
+    vocal_track_audio = vocal_track.audio 
+    instrumental_tracks_audio = [track.audio for track in instrumental_tracks]
     
     # Repitching
     match repitch:
         case None: # No repitching
             mashup_key = None
             add_to_save_name += "_no_repitch"
+        
         case 'vocals_to_instrumental': # Repitch the vocal track to match the instrumental track's key
             mashup_key = instrumental_tracks[0].key
+
+            # Repitch the vocal track to match the instrumental track's key
             if mashup_key != vocal_track.key: # We save computation time if the key is already the same.
-                vocal_track.repitch(mashup_key)
+                vocal_track_audio = vocal_track.repitch(mashup_key)
             add_to_save_name += "_repitch_vocals_to_instrumental"
+        
         case 'instrumental_to_vocals': # Repitch the instrumental tracks to match the vocal track's key
             mashup_key = vocal_track.key
             for i in range(len(instrumental_tracks)):
                 if instrumental_tracks[i].key != mashup_key: # We save computation time if the key is already the same.
                     # if track.instrument != 'drums': # Don't repitch drums?
-                    instrumental_tracks[i].repitch(mashup_key)
+                    instrumental_tracks_audio[i] = instrumental_tracks[i].repitch(mashup_key)
             add_to_save_name += "_repitch_instrumental_to_vocals"
         case _:
             raise ValueError(f"Invalid repitch value: {repitch}")
@@ -72,23 +80,17 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
     )
 
     # Starting the song on the first downbeat
-    audio_vocal_cropped = vocal_track.audio[int(vocal_track.downbeats[0] * vocal_track.sr):]
+    audio_vocal_cropped = vocal_track_audio[int(vocal_track.downbeats[0] * vocal_track.sr):]
 
     # Adjusting the instrumental tracks to match the vocal track
-    inst_tracks_audio = []
-    for track in instrumental_tracks:
+    for idx_track, track in enumerate(instrumental_tracks):
         # Starting the song on the first downbeat
-        track.audio = track.audio[int(track.downbeats[0] * track.sr):] # inplace modification because the following functions are inplace
+        instr_audio = instrumental_tracks_audio[idx_track][int(track.downbeats[0] * track.sr):]
 
-        # Resample if needed
-        if track.sr != mashup.sr:
-            track.resample(mashup.sr)
-        
         # Change the bpm
-        track.change_tempo(new_tempo=mashup.bpm)
-        inst_tracks_audio.append(track.audio)
+        instrumental_tracks_audio[idx_track] = track.change_tempo(new_tempo=mashup.bpm, overwrite_audio=instr_audio)
 
-    mashup.audio = mixing.additive_mix(audio_vocal_cropped, inst_tracks_audio)
+    mashup.audio = mixing.additive_mix(audio_vocal_cropped, instrumental_tracks_audio)
 
     # Normalize the mashup to the target loudness (-14 LUFS by deafult)
     mashup.audio = postprocessing.normalize_lufs(mashup.audio, mashup.sr, target_lufs=target_loudness)
@@ -103,7 +105,7 @@ def mashup_adjust_songscale(vocal_track_in, instrumental_tracks_in, target_loudn
 # Section-Based Mashup Functions
 # ============================================================================
 
-def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-14.0, time_adapt_method='bpm', adding_intros=True, save_folder_path=None, repitch = None, add_to_save_name = ""):
+def mashup_adjust_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-14.0, time_adapt_method='bpm', adding_intros=True, save_folder_path=None, repitch = None, add_to_save_name = ""):
     """
     Create a mashup by aligning sections of instrumental tracks to the vocal structure.
     
@@ -150,10 +152,11 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
     elif time_adapt_method == 'downbeats':
         start_song = vocal_segments_after_first_downbeat[0].downbeats_samples[0]
     # Crop vocal to the start of the song
-    crop_vocal = vocal_track.audio[int(start_song):]
+    vocal_audio = vocal_track.audio[int(start_song):]
 
     for vocal_section in vocal_segments_after_first_downbeat:
-        if time_adapt_method == 'downbeats' and (vocal_section.downbeats_samples is None or len(vocal_section.downbeats_samples) < 2): # Empty reference segment
+        # In downbeat alignment, ensure that the reference segment has at least 2 downbeats (i.e., at least 1 bar).
+        if time_adapt_method == 'downbeats' and (vocal_section.downbeats_samples is None or len(vocal_section.downbeats_samples) < 2):
             continue
         for i, inst_track in enumerate(instrumental_tracks):
             # Get the number of times this label has appeared in the instrumental track so far
@@ -165,9 +168,11 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
             # Repitch the instrumental section to the vocal section
             if repitch == 'instrumental_to_vocals' and inst_section.key != vocal_section.key: 
                 # if inst_track.instrument != 'drums': # Don't repitch drums?
-                inst_section.repitch(vocal_section.key)
+                inst_section_audio = inst_section.repitch(vocal_section.key)
+            else:
+                inst_section_audio = inst_section.audio
 
-            this_sec_audio_adapted = inst_section.time_stretch_this_section(ref_section=vocal_section, time_adapt_method=time_adapt_method)
+            this_sec_audio_adapted = inst_section.time_stretch_this_section(ref_section=vocal_section, time_adapt_method=time_adapt_method, overwrite_audio = inst_section_audio)
 
             if this_sec_audio_adapted is None: # Should not happen
                 raise ValueError(f"Instrumental section audio is empty for section {vocal_section.label} for instrumental track {inst_track.name}")
@@ -181,11 +186,11 @@ def mashup_by_section(vocal_track_in, instrumental_tracks_in, target_loudness=-1
     main_sections_instrumental = [concatenate.concatenate_sections(s) for s in instrumental_audio_sections]
 
     # Mix main sections
-    if len(crop_vocal) != len(main_sections_instrumental[0]):
-        length_mismatch_seconds = abs(len(crop_vocal) - len(main_sections_instrumental[0])) / mashup.sr
+    if len(vocal_audio) != len(main_sections_instrumental[0]):
+        length_mismatch_seconds = abs(len(vocal_audio) - len(main_sections_instrumental[0])) / mashup.sr
         if length_mismatch_seconds > 1:
-            warnings.warn(f"Length mismatch between vocal final main section ({len(crop_vocal)}) and instrumental final main sections ({len(main_sections_instrumental[0])}). Not a problem if both lengths are close, may be if they are too different (gap: {abs(len(crop_vocal) - len(main_sections_instrumental[0]))} samples, i.e. {length_mismatch_seconds} seconds).")
-    mixed_main_sections = mixing.additive_mix(crop_vocal, main_sections_instrumental)
+            warnings.warn(f"Length mismatch between vocal final main section ({len(vocal_audio)}) and instrumental final main sections ({len(main_sections_instrumental[0])}). Not a problem if both lengths are close, may be if they are too different (gap: {abs(len(vocal_audio) - len(main_sections_instrumental[0]))} samples, i.e. {length_mismatch_seconds} seconds).")
+    mixed_main_sections = mixing.additive_mix(vocal_audio, main_sections_instrumental)
     
     # We may want to add the original instrumental intro of the song
     if adding_intros:
