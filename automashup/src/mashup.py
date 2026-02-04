@@ -145,12 +145,18 @@ def mashup_adjust_by_section(vocal_track_in, instrumental_tracks_in, target_loud
         seg for seg in vocal_track.segments if seg.end >= vocal_first_downbeat
     ]
 
+    # We also ensure that the segment contains at least one bar (composed of at least two downbeats),
+    # otherwise, it is not possible to align it with the instrumental tracks.
+    if time_adapt_method == 'downbeats':
+        vocal_segments_after_first_downbeat = [seg for seg in vocal_segments_after_first_downbeat if seg.downbeats is not None and len(seg.downbeats) >= 2]
+
     # Crop vocal to the start of the song
     if time_adapt_method == 'bpm':
         # In the bpm condition, sections are aligned on their estimated start and end, and not on the downbeats!
         start_song = vocal_segments_after_first_downbeat[0].start_samples
     elif time_adapt_method == 'downbeats':
         start_song = vocal_segments_after_first_downbeat[0].downbeats_samples[0]
+
     # Crop vocal to the start of the song
     vocal_audio = vocal_track.audio[int(start_song):]
 
