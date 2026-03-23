@@ -1,0 +1,90 @@
+import torch
+import torchaudio
+import soundfile as sf
+from diffusers import StableAudioPipeline
+from diffusers.models.attention_processor import Attention, StableAudioAttnProcessor2_0
+
+#Test de chargement du nouveau module de cross attention
+#Ne pas modifier stable audio
+#Faire une classe custom DiTBlock avec une cross attention en plus
+#Chargé les poids du DiTBlock depuis le state dict et initialisé la nouvelle cross attn à zero
+
+class CustomAttention(Attention):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        # Initialisation à zéro de TOUS les paramètres
+        self._zero_init()
+
+    def _zero_init(self):
+        for name, param in self.named_parameters():
+            if param.requires_grad:
+                nn.init.zeros_(param)
+
+pipe = StableAudioPipeline.from_pretrained("../models/stabilityai/stable-audio-open-1.0", torch_dtype=torch.float16,local_files_only=True,ignore_mismatched_sizes=True)
+
+for block in pipe.transformer.transformer_blocks:
+    if hasattr(block, "attn25"):  # ou attn1 selon ce que tu veux
+        print("attn2")
+        old_attn = block.attn2
+
+        for name, param in old_attn.named_parameters():
+            print(name, param.is_meta)
+        
+        block.attn25 = CustomAttention(
+            query_dim=old_attn.query_dim,
+            cross_attention_dim=old_attn.cross_attention_dim,
+            heads=old_attn.heads,
+            dim_head=old_attn.inner_dim/old_attn.heads,
+            dropout=old_attn.dropout,
+            bias=old_attn.use_bias,
+            upcast_attention=old_attn.upcast_attention,
+            out_bias = False,
+            processor = StableAudioAttnProcessor2_0()
+        )
+
+        for name, param in block.attn25.named_parameters():
+            print(name, param.is_meta)
+    if hasattr(block, "attn1"):  # ou attn1 selon ce que tu veux
+        print("attn1")
+        for name, param in block.attn1.named_parameters():
+            print(name, param.is_meta)
+
+
+# Code pour lancer stable audio de base
+
+# pipe = pipe.to("cuda")
+
+
+# # define the prompts
+# prompt = "Classical, Soundtrack, Piano"
+# negative_prompt = "Low quality."
+# waveform, sample_rate = torchaudio.load("inpainting.wav")
+# target_sr = pipe.vae.config.sampling_rate
+# resampler = torchaudio.transforms.Resample(
+#     orig_freq=sample_rate,
+#     new_freq=target_sr
+# )
+# waveform = resampler(waveform)
+# initial_audio_waveforms = waveform.unsqueeze(0).to(
+#     device=pipe.device,
+#     dtype=pipe.dtype
+# )
+
+
+# # set the seed for generator
+# generator = torch.Generator("cuda").manual_seed(93452)
+
+# # run the generation
+# audio = pipe(
+#     prompt,
+#     negative_prompt=negative_prompt,
+#     num_inference_steps=200,
+#     audio_end_in_s=30.0,
+#     num_waveforms_per_prompt=1,
+#     generator=generator,
+# ).audios
+
+# output = audio[0].T.float().cpu().numpy()
+# sf.write("raw_song.wav", output, pipe.vae.sampling_rate)
+

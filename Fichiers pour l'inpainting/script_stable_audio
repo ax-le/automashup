@@ -1,0 +1,65 @@
+import torch
+import torchaudio
+import soundfile as sf
+from diffusers import StableAudioPipeline
+
+# Code pour l'inpainting score-based
+
+pipe = StableAudioPipeline.from_pretrained("../models/stabilityai/stable-audio-open-1.0", torch_dtype=torch.float16,local_files_only=True)
+pipe.att1.to_empty()
+pipe = pipe.to("cuda")
+
+# define the prompts
+prompt = "Classical, Soundtrack, Piano"
+negative_prompt = "Low quality."
+waveform, sample_rate = torchaudio.load("raw_song_edited_2.wav")
+target_sr = pipe.vae.config.sampling_rate
+resampler = torchaudio.transforms.Resample(
+    orig_freq=sample_rate,
+    new_freq=target_sr
+)
+waveform = resampler(waveform)
+initial_audio_waveforms = waveform.unsqueeze(0).to(
+    device=pipe.device,
+    dtype=pipe.dtype
+)
+
+
+# set the seed for generator
+generator = torch.Generator("cuda").manual_seed(0)
+
+# run the generation
+audio = pipe.score_inpaint(
+    prompt,
+    negative_prompt=negative_prompt,
+    num_inference_steps=200,
+    audio_end_in_s=30.0,
+    mask_end_in_s = 23.5,
+    mask_start_in_s = 9.9,
+    num_waveforms_per_prompt=1,
+    generator=generator,
+    initial_audio_waveforms=initial_audio_waveforms,
+    initial_audio_sampling_rate=target_sr,
+    xi = 2,
+    do_score_guidance = True,
+).audios
+
+"""
+Code pour le masking
+
+audio = pipe.audio_inpaint(
+    prompt,
+    negative_prompt=negative_prompt,
+    num_inference_steps=200,
+    audio_end_in_s=28.0,
+    mask_end_in_s = 22.0 ,
+    mask_start_in_s = 10,
+    num_waveforms_per_prompt=1,
+    generator=generator,
+    initial_audio_waveforms=initial_audio_waveforms,
+    initial_audio_sampling_rate=target_sr,
+).audios
+"""
+
+output = audio[0].T.float().cpu().numpy()
+sf.write("new_inpainting_2.wav", output, pipe.vae.sampling_rate)
